@@ -8,6 +8,7 @@ interface WhatsAppConfig {
     account_sid: string
     auth_token: string
     phone_number_id: string
+    messaging_service_sid: string | null
     messages_sent_today: number
 }
 
@@ -59,13 +60,20 @@ export async function POST(request: NextRequest) {
         const twilioClient = twilio(config.account_sid, config.auth_token)
 
         // Format the phone number for WhatsApp
-        const fromNumber = `whatsapp:${config.phone_number_id}`
         const toNumber = to.startsWith('whatsapp:') ? to : `whatsapp:${to}`
 
         // Build message options
         let messageOptions: any = {
-            from: fromNumber,
             to: toNumber,
+        }
+
+        // Use Messaging Service SID if available, otherwise use direct number
+        if (config.messaging_service_sid) {
+            messageOptions.messagingServiceSid = config.messaging_service_sid
+            console.log(`Using Messaging Service: ${config.messaging_service_sid}`)
+        } else {
+            messageOptions.from = `whatsapp:${config.phone_number_id}`
+            console.log(`Using direct number: ${config.phone_number_id}`)
         }
 
         if (contentSid) {
@@ -78,7 +86,7 @@ export async function POST(request: NextRequest) {
             }
             console.log(`Sending template message (Content SID: ${contentSid}) to ${toNumber}`)
         } else {
-            // Fallback: send as plain text (only works within 24h window or sandbox)
+            // Send as plain text (works within 24h window or sandbox)
             messageOptions.body = message
             console.log(`Sending plain text message to ${toNumber}`)
         }

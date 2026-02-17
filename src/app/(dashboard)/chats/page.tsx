@@ -12,9 +12,12 @@ import {
     Phone,
     Clock,
     CheckCircle,
+    CheckCheck,
     MessageCircle,
     ArrowLeft,
-    RefreshCw
+    RefreshCw,
+    Wifi,
+    WifiOff
 } from 'lucide-react'
 
 interface Conversation {
@@ -44,8 +47,15 @@ export default function ChatsPage() {
     const [loading, setLoading] = useState(true)
     const [sending, setSending] = useState(false)
     const [searchTerm, setSearchTerm] = useState('')
+    const [isRealtime, setIsRealtime] = useState(false)
 
     const messagesEndRef = useRef<HTMLDivElement>(null)
+    const selectedConvRef = useRef<Conversation | null>(null)
+
+    // Keep ref in sync with state
+    useEffect(() => {
+        selectedConvRef.current = selectedConversation
+    }, [selectedConversation])
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -56,46 +66,56 @@ export default function ChatsPage() {
 
         setLoading(true)
         try {
-            // Get all contacts with their latest message
-            const { data: contacts, error } = await supabase
-                .from('contacts')
-                .select('id, full_name, phone')
+            // Get all contacts that have messages
+            const { data: messagesData, error } = await supabase
+                .from('messages')
+                .select('contact_id, content, status, sent_at')
                 .eq('user_id', user.id)
-                .order('updated_at', { ascending: false })
+                .order('sent_at', { ascending: false })
 
             if (error) throw error
 
-            // For each contact, get their latest message
+            // Group by contact_id and get latest message
+            const contactMap = new Map<string, { content: string; status: string; sent_at: string; unread: number }>()
+            for (const msg of messagesData || []) {
+                if (!contactMap.has(msg.contact_id)) {
+                    contactMap.set(msg.contact_id, {
+                        content: msg.content,
+                        status: msg.status,
+                        sent_at: msg.sent_at,
+                        unread: msg.status === 'received' ? 1 : 0
+                    })
+                } else if (msg.status === 'received') {
+                    const existing = contactMap.get(msg.contact_id)!
+                    existing.unread++
+                }
+            }
+
+            if (contactMap.size === 0) {
+                setConversations([])
+                setLoading(false)
+                return
+            }
+
+            // Get contact info
+            const contactIds = Array.from(contactMap.keys())
+            const { data: contacts } = await supabase
+                .from('contacts')
+                .select('id, full_name, phone')
+                .in('id', contactIds)
+
             const conversationsData: Conversation[] = []
-
             for (const contact of contacts || []) {
-                const { data: lastMsg } = await supabase
-                    .from('messages')
-                    .select('content, status, sent_at')
-                    .eq('contact_id', contact.id)
-                    .order('sent_at', { ascending: false })
-                    .limit(1)
-                    .single()
-
-                if (lastMsg) {
-                    // Count unread (received messages)
-                    const { count } = await supabase
-                        .from('messages')
-                        .select('*', { count: 'exact', head: true })
-                        .eq('contact_id', contact.id)
-                        .eq('status', 'received')
-                    // We typically need an 'is_read' flag, but for now assuming count is correct
-                    // Or logic to count unread could be complex without a read flag.
-                    // Let's assume for now we just show a count but don't track read state perfectly yet.
-
+                const msgData = contactMap.get(contact.id)
+                if (msgData) {
                     conversationsData.push({
                         contact_id: contact.id,
-                        contact_name: contact.full_name,
+                        contact_name: contact.full_name || contact.phone,
                         contact_phone: contact.phone,
-                        last_message: lastMsg.content,
-                        last_message_at: lastMsg.sent_at,
-                        unread_count: count || 0,
-                        last_status: lastMsg.status
+                        last_message: msgData.content,
+                        last_message_at: msgData.sent_at,
+                        unread_count: msgData.unread,
+                        last_status: msgData.status
                     })
                 }
             }
@@ -159,6 +179,7 @@ export default function ChatsPage() {
             })
 
             if (response.ok) {
+                const result = await response.json()
                 // Add to local messages
                 const newMsg: Message = {
                     id: crypto.randomUUID(),
@@ -171,13 +192,15 @@ export default function ChatsPage() {
                 setNewMessage('')
                 setTimeout(scrollToBottom, 100)
 
-                // Insert into database - wait for it to ensure consistency
+                // Insert into database
                 await supabase.from('messages').insert({
                     user_id: user.id,
                     contact_id: selectedConversation.contact_id,
                     phone: selectedConversation.contact_phone,
                     content: newMessage,
                     status: 'sent',
+                    provider: 'twilio',
+                    provider_message_id: result.messageSid,
                     sent_at: new Date().toISOString()
                 })
 
@@ -211,6 +234,19 @@ export default function ChatsPage() {
         }
     }
 
+    const getInitials = (name: string) => {
+        return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+    }
+
+    const getAvatarColor = (name: string) => {
+        const colors = [
+            'bg-emerald-500', 'bg-blue-500', 'bg-purple-500', 'bg-amber-500',
+            'bg-rose-500', 'bg-cyan-500', 'bg-indigo-500', 'bg-teal-500'
+        ]
+        const index = name.charCodeAt(0) % colors.length
+        return colors[index]
+    }
+
     // Effect for initial load
     useEffect(() => {
         if (user) {
@@ -225,18 +261,67 @@ export default function ChatsPage() {
         }
     }, [selectedConversation, loadMessages])
 
-    // Effect for polling messages
+    // Realtime subscription for new messages
     useEffect(() => {
-        if (!selectedConversation || !user) return
+        if (!user) return
+
+        const channel = supabase
+            .channel('messages-realtime')
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: `user_id=eq.${user.id}`
+                },
+                (payload) => {
+                    console.log('📨 Nuevo mensaje recibido:', payload.new)
+                    const newMsg = payload.new as any
+
+                    // If we're viewing this conversation, add the message
+                    if (selectedConvRef.current && newMsg.contact_id === selectedConvRef.current.contact_id) {
+                        const formattedMsg: Message = {
+                            id: newMsg.id,
+                            content: newMsg.content,
+                            status: newMsg.status,
+                            sent_at: newMsg.sent_at,
+                            is_incoming: newMsg.status === 'received'
+                        }
+                        setMessages(prev => {
+                            // Avoid duplicates
+                            if (prev.some(m => m.id === formattedMsg.id)) return prev
+                            return [...prev, formattedMsg]
+                        })
+                        setTimeout(scrollToBottom, 100)
+                    }
+
+                    // Reload conversation list
+                    loadConversations()
+                }
+            )
+            .subscribe((status) => {
+                setIsRealtime(status === 'SUBSCRIBED')
+                console.log('Realtime status:', status)
+            })
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [user, loadConversations])
+
+    // Fallback polling (every 10 seconds) in case realtime doesn't work
+    useEffect(() => {
+        if (!selectedConversation || !user || isRealtime) return
 
         const interval = setInterval(() => {
-            loadMessages(selectedConversation.contact_id, false) // false = background update
-        }, 5000)
+            loadMessages(selectedConversation.contact_id, false)
+        }, 10000)
 
         return () => clearInterval(interval)
-    }, [selectedConversation, user, loadMessages])
+    }, [selectedConversation, user, isRealtime, loadMessages])
 
-    // Effect for auto-scroll on new messages
+    // Auto-scroll on new messages
     useEffect(() => {
         scrollToBottom()
     }, [messages])
@@ -278,6 +363,20 @@ export default function ChatsPage() {
                                 <RefreshCw className="h-4 w-4" />
                             </Button>
                         </div>
+                        {/* Realtime indicator */}
+                        <div className="flex items-center gap-1.5 mt-2">
+                            {isRealtime ? (
+                                <>
+                                    <Wifi className="h-3 w-3 text-green-500" />
+                                    <span className="text-[10px] text-green-600 font-medium">En vivo</span>
+                                </>
+                            ) : (
+                                <>
+                                    <WifiOff className="h-3 w-3 text-gray-400" />
+                                    <span className="text-[10px] text-gray-400">Actualizando cada 10s</span>
+                                </>
+                            )}
+                        </div>
                     </div>
 
                     {/* Conversations */}
@@ -289,7 +388,8 @@ export default function ChatsPage() {
                         ) : filteredConversations.length === 0 ? (
                             <div className="text-center py-12 px-4">
                                 <MessageCircle className="h-12 w-12 mx-auto text-gray-300 mb-4" />
-                                <p className="text-gray-500">No hay conversaciones</p>
+                                <p className="text-gray-500 font-medium">No hay conversaciones</p>
+                                <p className="text-gray-400 text-sm mt-1">Las conversaciones aparecerán aquí cuando envíes o recibas mensajes</p>
                             </div>
                         ) : (
                             filteredConversations.map((conv) => (
@@ -299,30 +399,28 @@ export default function ChatsPage() {
                                     className={`w-full p-4 text-left border-b border-gray-50 hover:bg-gray-50 transition-colors group relative ${selectedConversation?.contact_id === conv.contact_id ? 'bg-green-50' : ''}`}
                                 >
                                     <div className="flex items-start gap-3">
-                                        <div className="w-12 h-12 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                                            {/* Avatar Placeholder */}
-                                            <User className="h-6 w-6 text-gray-400" />
+                                        <div className={`w-12 h-12 rounded-full ${getAvatarColor(conv.contact_name)} flex-shrink-0 flex items-center justify-center overflow-hidden`}>
+                                            <span className="text-white font-bold text-sm">{getInitials(conv.contact_name)}</span>
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center justify-between mb-1">
                                                 <span className="font-semibold text-gray-900 truncate">
                                                     {conv.contact_name || conv.contact_phone}
                                                 </span>
-                                                <span className={`text-xs ${conv.unread_count > 0 ? 'text-green-600 font-medium' : 'text-gray-400'}`}>
+                                                <span className={`text-xs flex-shrink-0 ml-2 ${conv.unread_count > 0 ? 'text-green-600 font-medium' : 'text-gray-400'}`}>
                                                     {formatTime(conv.last_message_at)}
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-1">
-                                                {conv.last_status === 'sent' && <CheckCircle className="h-3 w-3 text-gray-400" />}
-                                                {conv.last_status === 'delivered' && <CheckCircle className="h-3 w-3 text-gray-400" />}
-                                                {conv.last_status === 'read' && <CheckCircle className="h-3 w-3 text-blue-500" />}
-
+                                                {conv.last_status !== 'received' && (
+                                                    <CheckCheck className={`h-4 w-4 flex-shrink-0 ${conv.last_status === 'read' ? 'text-blue-500' : 'text-gray-400'}`} />
+                                                )}
                                                 <p className="text-sm text-gray-500 truncate flex-1">
+                                                    {conv.last_status === 'received' && <span className="font-medium text-gray-700">📩 </span>}
                                                     {conv.last_message}
                                                 </p>
-
                                                 {conv.unread_count > 0 && (
-                                                    <span className="bg-green-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                                                    <span className="bg-green-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center flex-shrink-0">
                                                         {conv.unread_count}
                                                     </span>
                                                 )}
@@ -347,8 +445,8 @@ export default function ChatsPage() {
                                 >
                                     <ArrowLeft className="h-5 w-5 text-gray-600" />
                                 </button>
-                                <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
-                                    <User className="h-6 w-6 text-gray-400" />
+                                <div className={`w-10 h-10 rounded-full ${getAvatarColor(selectedConversation.contact_name)} flex items-center justify-center overflow-hidden`}>
+                                    <span className="text-white font-bold text-sm">{getInitials(selectedConversation.contact_name)}</span>
                                 </div>
                                 <div className="flex-1">
                                     <h3 className="font-semibold text-gray-900">
@@ -358,42 +456,79 @@ export default function ChatsPage() {
                                         {selectedConversation.contact_phone}
                                     </p>
                                 </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => loadMessages(selectedConversation.contact_id)}
+                                    className="!p-2"
+                                >
+                                    <RefreshCw className="h-4 w-4" />
+                                </Button>
                             </div>
 
                             {/* Messages Area */}
-                            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')] bg-repeat">
-                                {messages.map((msg) => (
-                                    <div
-                                        key={msg.id}
-                                        className={`flex ${msg.is_incoming ? 'justify-start' : 'justify-end'}`}
-                                    >
-                                        <div
-                                            className={`max-w-[80%] rounded-lg px-3 py-2 shadow-sm relative ${msg.is_incoming ? 'bg-white rounded-tl-none' : 'bg-[#d9fdd3] rounded-tr-none'
-                                                }`}
-                                        >
-                                            <p className="text-sm text-gray-900 whitespace-pre-wrap leading-relaxed">
-                                                {msg.content}
-                                            </p>
-                                            <div className="flex items-center justify-end gap-1 mt-1 select-none">
-                                                <span className="text-[10px] text-gray-500">
-                                                    {new Date(msg.sent_at).toLocaleTimeString('es-CO', {
-                                                        hour: '2-digit',
-                                                        minute: '2-digit'
-                                                    })}
-                                                </span>
-                                                {!msg.is_incoming && (
-                                                    <span className="ml-0.5">
-                                                        {msg.status === 'read' ? (
-                                                            <CheckCircle className="h-3 w-3 text-blue-500" />
-                                                        ) : (
-                                                            <CheckCircle className="h-3 w-3 text-gray-400" />
-                                                        )}
+                            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                                {/* Date separator for first message */}
+                                {messages.length > 0 && (
+                                    <div className="flex justify-center mb-4">
+                                        <span className="bg-white/80 text-gray-500 text-xs px-3 py-1 rounded-full shadow-sm backdrop-blur-sm">
+                                            {new Date(messages[0].sent_at).toLocaleDateString('es-CO', {
+                                                day: 'numeric', month: 'long', year: 'numeric'
+                                            })}
+                                        </span>
+                                    </div>
+                                )}
+                                {messages.map((msg, index) => {
+                                    // Show date separator when date changes
+                                    const showDate = index > 0 &&
+                                        new Date(msg.sent_at).toDateString() !== new Date(messages[index - 1].sent_at).toDateString()
+
+                                    return (
+                                        <div key={msg.id}>
+                                            {showDate && (
+                                                <div className="flex justify-center my-4">
+                                                    <span className="bg-white/80 text-gray-500 text-xs px-3 py-1 rounded-full shadow-sm backdrop-blur-sm">
+                                                        {new Date(msg.sent_at).toLocaleDateString('es-CO', {
+                                                            day: 'numeric', month: 'long', year: 'numeric'
+                                                        })}
                                                     </span>
-                                                )}
+                                                </div>
+                                            )}
+                                            <div className={`flex ${msg.is_incoming ? 'justify-start' : 'justify-end'}`}>
+                                                <div
+                                                    className={`max-w-[75%] rounded-lg px-3 py-2 shadow-sm relative ${msg.is_incoming
+                                                        ? 'bg-white rounded-tl-none'
+                                                        : 'bg-[#d9fdd3] rounded-tr-none'
+                                                        }`}
+                                                    style={{ wordBreak: 'break-word' }}
+                                                >
+                                                    <p className="text-sm text-gray-900 whitespace-pre-wrap leading-relaxed">
+                                                        {msg.content}
+                                                    </p>
+                                                    <div className="flex items-center justify-end gap-1 mt-1 select-none">
+                                                        <span className="text-[10px] text-gray-500">
+                                                            {new Date(msg.sent_at).toLocaleTimeString('es-CO', {
+                                                                hour: '2-digit',
+                                                                minute: '2-digit'
+                                                            })}
+                                                        </span>
+                                                        {!msg.is_incoming && (
+                                                            <span className="ml-0.5">
+                                                                {msg.status === 'read' ? (
+                                                                    <CheckCheck className="h-3.5 w-3.5 text-blue-500" />
+                                                                ) : msg.status === 'delivered' ? (
+                                                                    <CheckCheck className="h-3.5 w-3.5 text-gray-400" />
+                                                                ) : (
+                                                                    <CheckCircle className="h-3 w-3 text-gray-400" />
+                                                                )}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    )
+                                })}
                                 <div ref={messagesEndRef} />
                             </div>
 
@@ -402,23 +537,29 @@ export default function ChatsPage() {
                                 <div className="flex items-center gap-2 max-w-4xl mx-auto">
                                     <input
                                         type="text"
-                                        placeholder="Escribe un mensaje"
+                                        placeholder="Escribe un mensaje..."
                                         value={newMessage}
                                         onChange={(e) => setNewMessage(e.target.value)}
-                                        onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
-                                        className="flex-1 px-4 py-2 bg-white border border-white rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 text-sm"
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                e.preventDefault()
+                                                handleSendMessage()
+                                            }
+                                        }}
+                                        className="flex-1 px-4 py-2.5 bg-white border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 text-sm"
                                         disabled={sending}
                                     />
-                                    <Button
+                                    <button
                                         onClick={handleSendMessage}
                                         disabled={!newMessage.trim() || sending}
-                                        className={`!p-2 rounded-full ${sending ? 'opacity-50' : ''}`}
-                                        loading={sending}
+                                        className={`w-10 h-10 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center transition-colors ${(!newMessage.trim() || sending) ? 'opacity-50 cursor-not-allowed' : ''}`}
                                     >
-                                        <div className="w-6 h-6 flex items-center justify-center">
-                                            <Send className="h-4 w-4" />
-                                        </div>
-                                    </Button>
+                                        {sending ? (
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                                        ) : (
+                                            <Send className="h-4 w-4 text-white" />
+                                        )}
+                                    </button>
                                 </div>
                             </div>
                         </>
@@ -429,16 +570,25 @@ export default function ChatsPage() {
                                 <MessageCircle className="h-32 w-32 text-green-500" />
                             </div>
                             <h2 className="text-3xl font-light text-gray-800 mb-4">
-                                WhatsApp Web
+                                CreditCol Chat
                             </h2>
                             <p className="text-gray-500 max-w-md text-sm leading-relaxed">
-                                Envía y recibe mensajes sin necesidad de mantener tu teléfono conectado.
+                                Envía y recibe mensajes de WhatsApp directamente desde tu plataforma.
                                 <br />
-                                Usa CREDITCOL en hasta 4 dispositivos vinculados y 1 teléfono a la vez.
+                                Selecciona una conversación o envía una campaña para comenzar.
                             </p>
                             <div className="mt-8 flex items-center gap-2 text-xs text-gray-400">
-                                <Phone className="h-3 w-3" />
-                                <span>Cifrado de extremo a extremo (simulado)</span>
+                                {isRealtime ? (
+                                    <>
+                                        <Wifi className="h-3 w-3 text-green-500" />
+                                        <span className="text-green-500">Conectado en tiempo real</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Clock className="h-3 w-3" />
+                                        <span>Actualizando cada 10 segundos</span>
+                                    </>
+                                )}
                             </div>
                         </div>
                     )}

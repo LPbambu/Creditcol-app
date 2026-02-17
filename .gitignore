@@ -31,6 +31,10 @@ desktop.ini
 .vscode/
 .idea/
 
+# VPS scripts (contain credentials)
+vps-*.js
+scheduler-keeper.js
+
 # Misc
 *.tsbuildinfo
 next-env.d.ts
