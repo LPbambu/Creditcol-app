@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import twilio from 'twilio'
 
-// Define interface for the config to avoid 'never' type issues
+// Define interface for the config
 interface WhatsAppConfig {
     id: string
     account_sid: string
@@ -14,20 +14,25 @@ interface WhatsAppConfig {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json()
-        const { userId, to, message } = body
+        const { userId, to, message, contentSid, contentVariables } = body
 
-        if (!userId || !to || !message) {
+        if (!userId || !to) {
             return NextResponse.json(
-                { error: 'Missing required fields: userId, to, message' },
+                { error: 'Missing required fields: userId, to' },
                 { status: 400 }
             )
         }
 
-        // Create a Supabase client with auth context (cookies)
+        if (!message && !contentSid) {
+            return NextResponse.json(
+                { error: 'Either message or contentSid is required' },
+                { status: 400 }
+            )
+        }
+
         const supabase = createSupabaseServerClient()
 
         // Fetch user's WhatsApp configuration
-        // We use 'any' cast here because the Database types might not fully infer the row type for this query
         const { data: rawConfig, error: configError } = await supabase
             .from('whatsapp_config')
             .select('*')
@@ -57,12 +62,29 @@ export async function POST(request: NextRequest) {
         const fromNumber = `whatsapp:${config.phone_number_id}`
         const toNumber = to.startsWith('whatsapp:') ? to : `whatsapp:${to}`
 
-        // Send the message
-        const twilioMessage = await twilioClient.messages.create({
-            body: message,
+        // Build message options
+        let messageOptions: any = {
             from: fromNumber,
             to: toNumber,
-        })
+        }
+
+        if (contentSid) {
+            // Use approved template via Content SID (PRODUCTION mode)
+            messageOptions.contentSid = contentSid
+            if (contentVariables) {
+                messageOptions.contentVariables = typeof contentVariables === 'string'
+                    ? contentVariables
+                    : JSON.stringify(contentVariables)
+            }
+            console.log(`Sending template message (Content SID: ${contentSid}) to ${toNumber}`)
+        } else {
+            // Fallback: send as plain text (only works within 24h window or sandbox)
+            messageOptions.body = message
+            console.log(`Sending plain text message to ${toNumber}`)
+        }
+
+        // Send the message
+        const twilioMessage = await twilioClient.messages.create(messageOptions)
 
         // Update messages_sent_today counter
         await supabase

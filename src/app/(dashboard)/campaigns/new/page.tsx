@@ -164,7 +164,7 @@ export default function NewCampaignPage() {
                 // Fetch template content
                 const { data: template } = await supabase
                     .from('message_templates')
-                    .select('content')
+                    .select('content, whatsapp_template_id')
                     .eq('id', formData.template_id)
                     .single()
 
@@ -225,14 +225,25 @@ export default function NewCampaignPage() {
                     messageContent = messageContent.replace(/\{\{ciudad\}\}/gi, contact.city || '')
 
                     // Send message via API
+                    // Build request body - use Content SID for approved templates
+                    const sendBody: any = {
+                        userId: user.id,
+                        to: contact.phone,
+                    }
+
+                    if ((template as any).whatsapp_template_id) {
+                        // Use approved template (Content SID)
+                        sendBody.contentSid = (template as any).whatsapp_template_id
+                        sendBody.contentVariables = { '1': contact.full_name || 'Cliente' }
+                    } else {
+                        // Fallback to plain text
+                        sendBody.message = messageContent
+                    }
+
                     const response = await fetch('/api/whatsapp/send', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            userId: user.id,
-                            to: contact.phone,
-                            message: messageContent,
-                        }),
+                        body: JSON.stringify(sendBody),
                     })
 
                     if (response.ok) {
