@@ -15,6 +15,7 @@ import {
     Activity,
     LogOut,
     Inbox,
+    Send,
 } from 'lucide-react'
 
 interface SidebarLink {
@@ -25,6 +26,7 @@ interface SidebarLink {
 
 const mainLinks: SidebarLink[] = [
     { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard className="h-5 w-5" /> },
+    { href: '/send', label: 'Envío Manual', icon: <Send className="h-5 w-5" /> },
     { href: '/chats', label: 'Chats', icon: <Inbox className="h-5 w-5" /> },
     { href: '/contacts', label: 'Contactos', icon: <Users className="h-5 w-5" /> },
     { href: '/messages', label: 'Mensajes', icon: <MessageSquare className="h-5 w-5" /> },
