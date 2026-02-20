@@ -139,8 +139,16 @@ export default function ManualSendPage() {
         const message = personalizeMessage(template.content, contact)
         const link = getWhatsAppLink(contact.phone, message)
 
-        // Open WhatsApp
-        window.open(link, '_blank')
+        // Mobile optimization: try to open app directly
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+
+        if (isMobile) {
+            // For mobile, location.href is often better to trigger app intent
+            window.location.href = link
+        } else {
+            // Desktop
+            window.open(link, '_blank')
+        }
 
         // Mark as sent
         const updated = [...contacts]
@@ -280,8 +288,8 @@ export default function ManualSendPage() {
                                                 key={t.id}
                                                 onClick={() => setSelectedTemplate(t.id)}
                                                 className={`w-full text-left p-3 rounded-lg border transition-all ${selectedTemplate === t.id
-                                                        ? 'border-green-500 bg-green-50 ring-2 ring-green-500/20'
-                                                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                                                    ? 'border-green-500 bg-green-50 ring-2 ring-green-500/20'
+                                                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                                                     }`}
                                             >
                                                 <span className="font-medium text-gray-900 text-sm">{t.name}</span>
@@ -342,8 +350,8 @@ export default function ManualSendPage() {
                                             }`}
                                     >
                                         <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${selectedContactIds.has(contact.id)
-                                                ? 'bg-green-500 border-green-500'
-                                                : 'border-gray-300'
+                                            ? 'bg-green-500 border-green-500'
+                                            : 'border-gray-300'
                                             }`}>
                                             {selectedContactIds.has(contact.id) && (
                                                 <Check className="h-3 w-3 text-white" />
