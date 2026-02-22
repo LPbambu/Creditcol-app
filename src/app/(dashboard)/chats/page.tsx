@@ -70,7 +70,6 @@ export default function ChatsPage() {
             const { data: messagesData, error } = await supabase
                 .from('messages')
                 .select('contact_id, content, status, sent_at')
-                .eq('user_id', user.id)
                 .order('sent_at', { ascending: false })
 
             if (error) throw error

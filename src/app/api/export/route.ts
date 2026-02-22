@@ -47,7 +47,6 @@ export async function GET(request: NextRequest) {
             const { data: contacts, error } = await supabase
                 .from('contacts')
                 .select('full_name, phone, email, city, is_active, is_blocked, created_at')
-                .eq('user_id', userId)
                 .order('full_name')
 
             if (error) throw error
@@ -67,7 +66,6 @@ export async function GET(request: NextRequest) {
             const { data: campaigns, error } = await supabase
                 .from('campaigns')
                 .select('name, status, total_contacts, messages_sent, messages_failed, created_at, completed_at')
-                .eq('user_id', userId)
                 .order('created_at', { ascending: false })
 
             if (error) throw error
@@ -95,7 +93,6 @@ export async function GET(request: NextRequest) {
                     response_content,
                     contacts!inner(full_name)
                 `)
-                .eq('user_id', userId)
                 .order('sent_at', { ascending: false })
                 .limit(1000)
 
@@ -116,7 +113,6 @@ export async function GET(request: NextRequest) {
             const { data: logs, error } = await supabase
                 .from('system_logs')
                 .select('action_type, action_category, description, status, created_at')
-                .eq('user_id', userId)
                 .order('created_at', { ascending: false })
                 .limit(500)
 

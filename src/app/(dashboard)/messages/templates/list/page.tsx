@@ -51,7 +51,6 @@ export default function TemplatesListPage() {
             const { data, error } = await supabase
                 .from('message_templates')
                 .select('*')
-                .eq('user_id', user.id)
                 .order('created_at', { ascending: false })
 
             if (error) throw error

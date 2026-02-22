@@ -40,7 +40,6 @@ export default function LogsPage() {
             let query = supabase
                 .from('system_logs')
                 .select('*')
-                .eq('user_id', user.id)
                 .order('created_at', { ascending: false })
                 .limit(50)
 

@@ -37,7 +37,6 @@ export async function POST(request: NextRequest) {
         const { data: rawConfig, error: configError } = await supabase
             .from('whatsapp_config')
             .select('*')
-            .eq('user_id', userId)
             .single()
 
         const config = rawConfig as any as WhatsAppConfig | null

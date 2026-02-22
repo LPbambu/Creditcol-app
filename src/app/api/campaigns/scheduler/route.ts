@@ -38,7 +38,6 @@ export async function GET(request: NextRequest) {
             const { data: contacts } = await supabase
                 .from('contacts')
                 .select('id, full_name, phone, email, city')
-                .eq('user_id', campaign.user_id)
                 .eq('is_active', true)
                 .eq('is_blocked', false)
 

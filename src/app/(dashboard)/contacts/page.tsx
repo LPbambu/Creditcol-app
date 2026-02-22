@@ -46,7 +46,6 @@ export default function ContactsPage() {
             let query = supabase
                 .from('contacts')
                 .select('*', { count: 'exact' })
-                .eq('user_id', user.id)
                 .order('created_at', { ascending: false })
                 .range((currentPage - 1) * pageSize, currentPage * pageSize - 1)
 
@@ -99,7 +98,6 @@ export default function ContactsPage() {
             const { error } = await supabase
                 .from('contacts')
                 .delete()
-                .eq('user_id', user.id)
 
             if (error) throw error
 

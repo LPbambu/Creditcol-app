@@ -40,7 +40,6 @@ export default function CampaignsPage() {
             const { data, error } = await supabase
                 .from('campaigns')
                 .select('*')
-                .eq('user_id', user.id)
                 .order('created_at', { ascending: false })
 
             if (error) throw error
@@ -127,7 +126,6 @@ export default function CampaignsPage() {
             const { data: failedMessages } = await supabase
                 .from('messages')
                 .select('contact_id')
-                .eq('user_id', user.id)
                 .in('status', ['failed', 'error'])
 
             const failedContactIds = (failedMessages as { contact_id: string }[] | null)?.map(m => m.contact_id) || []

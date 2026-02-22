@@ -243,7 +243,6 @@ export default function ImportContactsPage() {
                 const { data: existing } = await supabase
                     .from('contacts')
                     .select('id')
-                    .eq('user_id', user.id)
                     .eq('phone', normalizedPhone)
                     .single()
 

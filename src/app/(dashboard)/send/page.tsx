@@ -64,7 +64,6 @@ export default function ManualSendPage() {
             const { data: templatesData } = await supabase
                 .from('message_templates')
                 .select('id, name, content, variables')
-                .eq('user_id', user.id)
                 .eq('is_active', true)
                 .order('name')
 
@@ -79,7 +78,6 @@ export default function ManualSendPage() {
         const { data } = await supabase
             .from('contacts')
             .select('id, full_name, phone, email, city')
-            .eq('user_id', user.id)
             .eq('is_active', true)
             .eq('is_blocked', false)
             .order('full_name')

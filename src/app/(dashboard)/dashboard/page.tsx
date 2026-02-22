@@ -76,26 +76,21 @@ export default function DashboardPage() {
             const [contacts, campaigns, messagesSent, messagesReceived, blocked] = await Promise.all([
                 supabase
                     .from('contacts')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('user_id', user.id),
+                    .select('*', { count: 'exact', head: true }),
                 supabase
                     .from('campaigns')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('user_id', user.id),
+                    .select('*', { count: 'exact', head: true }),
                 supabase
                     .from('messages')
                     .select('*', { count: 'exact', head: true })
-                    .eq('user_id', user.id)
                     .in('status', ['sent', 'delivered', 'read']),
                 supabase
                     .from('messages')
                     .select('*', { count: 'exact', head: true })
-                    .eq('user_id', user.id)
                     .eq('status', 'received'),
                 supabase
                     .from('contacts')
                     .select('*', { count: 'exact', head: true })
-                    .eq('user_id', user.id)
                     .eq('is_blocked', true),
             ])
 
@@ -134,14 +129,12 @@ export default function DashboardPage() {
                 supabase
                     .from('messages')
                     .select('*', { count: 'exact', head: true })
-                    .eq('user_id', user.id)
                     .in('status', ['sent', 'delivered', 'read'])
                     .gte('sent_at', startOfDay)
                     .lte('sent_at', endOfDay),
                 supabase
                     .from('messages')
                     .select('*', { count: 'exact', head: true })
-                    .eq('user_id', user.id)
                     .eq('status', 'received')
                     .gte('sent_at', startOfDay)
                     .lte('sent_at', endOfDay),
@@ -164,7 +157,6 @@ export default function DashboardPage() {
             const { data } = await supabase
                 .from('system_logs')
                 .select('id, action_type, description, created_at, status')
-                .eq('user_id', user.id)
                 .order('created_at', { ascending: false })
                 .limit(5)
 
@@ -190,7 +182,6 @@ export default function DashboardPage() {
                     contact_id,
                     contacts!inner(full_name)
                 `)
-                .eq('user_id', user.id)
                 .order('sent_at', { ascending: false })
                 .limit(5)
 

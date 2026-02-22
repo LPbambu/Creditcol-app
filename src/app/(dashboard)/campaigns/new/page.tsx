@@ -55,7 +55,6 @@ export default function NewCampaignPage() {
         const { data } = await supabase
             .from('message_templates')
             .select('*')
-            .eq('user_id', user.id)
             .eq('is_active', true)
 
         setTemplates(data || [])
@@ -67,7 +66,6 @@ export default function NewCampaignPage() {
         const { count } = await supabase
             .from('contacts')
             .select('*', { count: 'exact', head: true })
-            .eq('user_id', user.id)
             .eq('is_active', true)
             .eq('is_blocked', false)
 
@@ -79,7 +77,6 @@ export default function NewCampaignPage() {
         const { data } = await supabase
             .from('contacts')
             .select('id, full_name, phone')
-            .eq('user_id', user.id)
             .eq('is_active', true)
             .eq('is_blocked', false)
             .order('full_name')
@@ -91,7 +88,6 @@ export default function NewCampaignPage() {
         const { data } = await supabase
             .from('excel_uploads')
             .select('*')
-            .eq('user_id', user.id)
             .order('created_at', { ascending: false })
         setPackages(data || [])
     }
@@ -178,7 +174,6 @@ export default function NewCampaignPage() {
                     const { data: allContactsData } = await supabase
                         .from('contacts')
                         .select('id, full_name, phone, email, city, notes')
-                        .eq('user_id', user.id)
                         .eq('is_active', true)
                         .eq('is_blocked', false)
                     contactsToSend = allContactsData || []
@@ -190,7 +185,6 @@ export default function NewCampaignPage() {
                     const { data: packageContactsData } = await supabase
                         .from('contacts')
                         .select('id, full_name, phone, email, city, notes')
-                        .eq('user_id', user.id)
                         .in('upload_id', Array.from(selectedPackageIds))
                         .eq('is_active', true)
                         .eq('is_blocked', false)
@@ -203,7 +197,6 @@ export default function NewCampaignPage() {
                     const { data: selectedContactsData } = await supabase
                         .from('contacts')
                         .select('id, full_name, phone, email, city, notes')
-                        .eq('user_id', user.id)
                         .in('id', Array.from(selectedContactIds))
                     contactsToSend = selectedContactsData || []
                 }

@@ -35,7 +35,6 @@ export const logService = {
             let query = supabase
                 .from('system_logs')
                 .select('*')
-                .eq('user_id', userId)
                 .order('created_at', { ascending: false })
 
             if (options?.category) {
