@@ -253,13 +253,12 @@ export default function TemplatesListPage() {
                                                 <Copy className="h-4 w-4" />
                                             )}
                                         </button>
-                                        <Link href={`/messages/templates?id=${template.id}`}>
-                                            <button
-                                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-100"
-                                                title="Editar plantilla"
-                                            >
-                                                <Edit2 className="h-4 w-4" />
-                                            </button>
+                                        <Link
+                                            href={`/messages/templates?id=${template.id}`}
+                                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-100 flex items-center justify-center"
+                                            title="Editar plantilla"
+                                        >
+                                            <Edit2 className="h-4 w-4" />
                                         </Link>
                                         <button
                                             onClick={() => deleteTemplate(template.id)}
