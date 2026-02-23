@@ -54,8 +54,10 @@ export default function ManualSendPage() {
     const [campaignName, setCampaignName] = useState('')
     const [sentCount, setSentCount] = useState(0)
     const [skippedCount, setSkippedCount] = useState(0)
+    const [packages, setPackages] = useState<any[]>([])
+    const [selectedPackage, setSelectedPackage] = useState<string>('all')
 
-    // Load templates and contacts
+    // Load templates and packages
     useEffect(() => {
         if (!user) return
 
@@ -68,26 +70,44 @@ export default function ManualSendPage() {
                 .order('name')
 
             setTemplates(templatesData || [])
+
+            // Load available packages
+            const { data: packagesData } = await supabase
+                .from('excel_uploads')
+                .select('id, file_name, created_at')
+                .order('created_at', { ascending: false })
+
+            setPackages(packagesData || [])
             setLoading(false)
         }
         loadData()
     }, [user])
 
-    const loadContacts = useCallback(async () => {
+    const loadContacts = useCallback(async (packageId: string) => {
         if (!user) return
-        const { data } = await supabase
+        setLoading(true)
+        setSelectedContactIds(new Set())
+        setSelectAll(false)
+
+        let query = supabase
             .from('contacts')
             .select('id, full_name, phone, email, city')
             .eq('is_active', true)
             .eq('is_blocked', false)
-            .order('full_name')
+
+        if (packageId !== 'all') {
+            query = query.eq('upload_id', packageId)
+        }
+
+        const { data } = await query.order('full_name')
 
         setContacts((data || []).map(c => ({ ...c, sent: false, skipped: false })))
+        setLoading(false)
     }, [user])
 
     useEffect(() => {
-        if (user) loadContacts()
-    }, [user, loadContacts])
+        if (user) loadContacts(selectedPackage)
+    }, [user, loadContacts, selectedPackage])
 
     const formatName = (fullName: string | null): string => {
         if (!fullName) return '';
@@ -360,8 +380,25 @@ export default function ManualSendPage() {
                         <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col" style={{ maxHeight: '600px' }}>
                             <div className="p-4 border-b border-gray-100">
                                 <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    <List className="inline h-4 w-4 mr-1" />
+                                    Paquete de Contactos (Archivo de Excel)
+                                </label>
+                                <select
+                                    value={selectedPackage}
+                                    onChange={(e) => setSelectedPackage(e.target.value)}
+                                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 mb-4 bg-gray-50 text-gray-800 font-medium"
+                                >
+                                    <option value="all">Todos los contactos en tu base de datos</option>
+                                    {packages.map(p => (
+                                        <option key={p.id} value={p.id}>
+                                            📁 {p.file_name} - Subido el {new Date(p.created_at).toLocaleDateString()}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
                                     <User className="inline h-4 w-4 mr-1" />
-                                    Selecciona contactos ({selectedContactIds.size} seleccionados)
+                                    Selecciona contactos ({selectedContactIds.size} seleccionados de {contacts.length})
                                 </label>
                                 <input
                                     type="text"
