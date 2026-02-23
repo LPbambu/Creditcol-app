@@ -93,6 +93,21 @@ export async function testWhatsAppConnection(userId: string): Promise<TestConnec
     }
 }
 
+const formatName = (fullName?: string | null): string => {
+    if (!fullName) return '';
+    const parts = fullName.trim().toLowerCase().split(/\s+/);
+    if (parts.length === 0) return '';
+
+    const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.slice(1);
+
+    if (parts.length === 1) return capitalize(parts[0]);
+    if (parts.length === 2) return `${capitalize(parts[0])} ${capitalize(parts[1])}`;
+    if (parts.length === 3) return `${capitalize(parts[0])} ${capitalize(parts[1])}`; // Name1 Surname1
+
+    // Typical structure: Name1 Name2 Surname1 Surname2 -> parts[0] + parts[2]
+    return `${capitalize(parts[0])} ${capitalize(parts[2])}`;
+}
+
 /**
  * Personalize a message template with contact data
  */
@@ -101,9 +116,11 @@ export function personalizeMessage(template: string, contact: { full_name?: stri
 
     // Replace common variables
     if (contact.full_name) {
-        message = message.replace(/\{\{nombre\}\}/gi, contact.full_name)
-        message = message.replace(/\{\{name\}\}/gi, contact.full_name)
-        message = message.replace(/\{\{full_name\}\}/gi, contact.full_name)
+        const formattedName = formatName(contact.full_name);
+        message = message.replace(/\{\{nombre\}\}/gi, formattedName)
+        message = message.replace(/\{\{name\}\}/gi, formattedName)
+        message = message.replace(/\{\{full_name\}\}/gi, formattedName)
+        message = message.replace(/\{\{1\}\}/gi, formattedName)
     }
 
     if (contact.phone) {
@@ -113,6 +130,7 @@ export function personalizeMessage(template: string, contact: { full_name?: stri
 
     // Replace any remaining custom fields
     Object.keys(contact).forEach(key => {
+        if (key === 'full_name' || key === 'phone') return; // Skip standard keys
         const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'gi')
         message = message.replace(regex, String(contact[key] || ''))
     })

@@ -89,15 +89,53 @@ export default function ManualSendPage() {
         if (user) loadContacts()
     }, [user, loadContacts])
 
+    const formatName = (fullName: string | null): string => {
+        if (!fullName) return '';
+        const parts = fullName.trim().toLowerCase().split(/\s+/);
+        if (parts.length === 0) return '';
+
+        const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.slice(1);
+
+        if (parts.length === 1) return capitalize(parts[0]);
+        if (parts.length === 2) return `${capitalize(parts[0])} ${capitalize(parts[1])}`;
+        if (parts.length === 3) return `${capitalize(parts[0])} ${capitalize(parts[1])}`; // Name1 Surname1
+
+        // Typical structure: Name1 Name2 Surname1 Surname2 -> parts[0] + parts[2]
+        return `${capitalize(parts[0])} ${capitalize(parts[2])}`;
+    }
+
     const personalizeMessage = (template: string, contact: Contact): string => {
         let msg = template
-        msg = msg.replace(/\{\{nombre\}\}/gi, contact.full_name || '')
-        msg = msg.replace(/\{\{1\}\}/gi, contact.full_name || '')
+        const formattedName = formatName(contact.full_name)
+        msg = msg.replace(/\{\{nombre\}\}/gi, formattedName)
+        msg = msg.replace(/\{\{1\}\}/gi, formattedName)
         msg = msg.replace(/\{\{telefono\}\}/gi, contact.phone || '')
         msg = msg.replace(/\{\{email\}\}/gi, contact.email || '')
         msg = msg.replace(/\{\{ciudad\}\}/gi, contact.city || '')
         return msg
     }
+
+    // Keyboard shortcuts for manual send optimization
+    useEffect(() => {
+        if (step !== 'sending') return
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Do not trigger if user is typing in an input (though there are none in this step)
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+
+            if (e.key === 'Enter') {
+                e.preventDefault()
+                // Find and click the send button to ensure all state is current
+                document.getElementById('btn-send-current')?.click()
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault()
+                document.getElementById('btn-skip-current')?.click()
+            }
+        }
+
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [step])
 
     const getWhatsAppLink = (phone: string, message: string): string => {
         // Clean the phone number
@@ -454,21 +492,28 @@ export default function ManualSendPage() {
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="p-5 bg-gray-50 border-t border-gray-100">
+                        <div className="p-5 bg-gray-50 border-t border-gray-100 flex flex-col gap-3">
+                            <div className="flex items-center justify-center text-xs text-gray-400 mb-1 hidden md:flex gap-4">
+                                <span>💡 Atajos de teclado:</span>
+                                <span><kbd className="bg-gray-200 px-1.5 py-0.5 rounded text-gray-600">Enter</kbd> Enviar</span>
+                                <span><kbd className="bg-gray-200 px-1.5 py-0.5 rounded text-gray-600">🡒</kbd> Omitir</span>
+                            </div>
                             <div className="flex items-center gap-3">
                                 <button
+                                    id="btn-skip-current"
                                     onClick={handleSkipCurrent}
                                     className="flex-1 py-3 px-4 border border-gray-300 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors font-medium text-sm flex items-center justify-center gap-2"
                                 >
                                     <SkipForward className="h-4 w-4" />
-                                    Omitir
+                                    <span>Omitir <span className="hidden md:inline text-gray-400 text-xs">(🡒)</span></span>
                                 </button>
                                 <button
+                                    id="btn-send-current"
                                     onClick={handleSendCurrent}
                                     className="flex-[2] py-3 px-4 bg-green-500 hover:bg-green-600 text-white rounded-xl transition-colors font-semibold text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
                                 >
                                     <ExternalLink className="h-4 w-4" />
-                                    Abrir en WhatsApp y Enviar
+                                    <span>Abrir en WhatsApp y Enviar <span className="hidden md:inline text-green-200 text-xs">(Enter)</span></span>
                                 </button>
                             </div>
                         </div>
