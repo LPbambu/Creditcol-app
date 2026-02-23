@@ -641,7 +641,7 @@ export default function ManualSendPage() {
                                 setSelectedContactIds(new Set())
                                 setSelectedTemplate('')
                                 setCampaignName('')
-                                loadContacts()
+                                loadContacts(selectedPackage)
                             }}
                         >
                             <RotateCcw className="h-4 w-4 mr-2" /> Nueva campaña
