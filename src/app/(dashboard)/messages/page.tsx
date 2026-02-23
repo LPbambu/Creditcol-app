@@ -13,6 +13,7 @@ import {
     MessageSquare,
     FileText
 } from 'lucide-react'
+import Link from 'next/link'
 
 export default function MessagesPage() {
     const { user, profile } = useAuth()
@@ -153,12 +154,13 @@ export default function MessagesPage() {
                                         >
                                             <Copy className="h-4 w-4" />
                                         </button>
-                                        <button
-                                            className="p-2 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                        <Link
+                                            href={`/messages/templates?id=${template.id}`}
+                                            className="p-2 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors flex items-center justify-center"
                                             title="Editar"
                                         >
                                             <Edit className="h-4 w-4" />
-                                        </button>
+                                        </Link>
                                         <button
                                             onClick={() => handleDelete(template.id)}
                                             className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
