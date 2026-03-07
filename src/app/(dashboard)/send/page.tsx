@@ -40,6 +40,36 @@ interface Contact {
     skipped: boolean
 }
 
+const SESSION_KEY = 'creditcol_manual_send_session'
+
+interface SavedSession {
+    step: 'sending'
+    campaignName: string
+    selectedTemplate: string
+    selectedPackage: string
+    contacts: Contact[]
+    currentIndex: number
+    sentCount: number
+    skippedCount: number
+    savedAt: string
+}
+
+function saveSession(data: SavedSession) {
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify(data)) } catch { }
+}
+
+function loadSession(): SavedSession | null {
+    try {
+        const raw = localStorage.getItem(SESSION_KEY)
+        if (!raw) return null
+        return JSON.parse(raw) as SavedSession
+    } catch { return null }
+}
+
+function clearSession() {
+    try { localStorage.removeItem(SESSION_KEY) } catch { }
+}
+
 export default function ManualSendPage() {
     const { user, profile } = useAuth()
     const [step, setStep] = useState<'setup' | 'sending' | 'done'>('setup')
@@ -56,6 +86,14 @@ export default function ManualSendPage() {
     const [skippedCount, setSkippedCount] = useState(0)
     const [packages, setPackages] = useState<any[]>([])
     const [selectedPackage, setSelectedPackage] = useState<string>('all')
+    const [savedSession, setSavedSession] = useState<SavedSession | null>(null)
+    const [sessionBannerDismissed, setSessionBannerDismissed] = useState(false)
+
+    // Check for a saved session on first load
+    useEffect(() => {
+        const session = loadSession()
+        if (session) setSavedSession(session)
+    }, [])
 
     // Load templates and packages
     useEffect(() => {
@@ -108,6 +146,34 @@ export default function ManualSendPage() {
     useEffect(() => {
         if (user) loadContacts(selectedPackage)
     }, [user, loadContacts, selectedPackage])
+
+    // Persist session every time key state changes while in 'sending' step
+    useEffect(() => {
+        if (step !== 'sending') return
+        saveSession({
+            step: 'sending',
+            campaignName,
+            selectedTemplate,
+            selectedPackage,
+            contacts,
+            currentIndex,
+            sentCount,
+            skippedCount,
+            savedAt: new Date().toISOString(),
+        })
+    }, [step, contacts, currentIndex, sentCount, skippedCount, campaignName, selectedTemplate, selectedPackage])
+
+    const resumeSession = (session: SavedSession) => {
+        setStep(session.step)
+        setCampaignName(session.campaignName)
+        setSelectedTemplate(session.selectedTemplate)
+        setSelectedPackage(session.selectedPackage)
+        setContacts(session.contacts)
+        setCurrentIndex(session.currentIndex)
+        setSentCount(session.sentCount)
+        setSkippedCount(session.skippedCount)
+        setSavedSession(null)
+    }
 
     const formatName = (fullName: string | null): string => {
         if (!fullName) return '';
@@ -184,6 +250,7 @@ export default function ManualSendPage() {
         setCurrentIndex(0)
         setSentCount(0)
         setSkippedCount(0)
+        clearSession() // clear any old session before starting fresh
         setStep('sending')
     }
 
@@ -292,6 +359,34 @@ export default function ManualSendPage() {
             subtitle="Envía mensajes uno por uno a través de WhatsApp"
             user={profile ? { name: profile.full_name || 'Usuario', email: profile.email } : undefined}
         >
+            {/* Resume Session Banner */}
+            {savedSession && !sessionBannerDismissed && (
+                <div className="mb-6 bg-amber-50 border border-amber-300 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+                    <div>
+                        <p className="font-semibold text-amber-800">📂 Sesión de envío guardada</p>
+                        <p className="text-sm text-amber-700 mt-0.5">
+                            Campaña: <strong>{savedSession.campaignName}</strong> —
+                            {savedSession.sentCount} enviados, {savedSession.skippedCount} omitidos, en el contacto #{savedSession.currentIndex + 1} de {savedSession.contacts.length}.
+                            Guardado el {new Date(savedSession.savedAt).toLocaleString('es-CO')}.
+                        </p>
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0">
+                        <button
+                            onClick={() => resumeSession(savedSession)}
+                            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-semibold transition-colors"
+                        >
+                            ▶ Continuar sesión
+                        </button>
+                        <button
+                            onClick={() => { clearSession(); setSavedSession(null) }}
+                            className="px-4 py-2 bg-white border border-amber-300 hover:bg-amber-50 text-amber-700 rounded-lg text-sm font-medium transition-colors"
+                        >
+                            Descartar
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Step: SETUP */}
             {step === 'setup' && (
                 <div className="max-w-5xl mx-auto space-y-6">
@@ -637,6 +732,7 @@ export default function ManualSendPage() {
                         <Button
                             variant="outline"
                             onClick={() => {
+                                clearSession()
                                 setStep('setup')
                                 setSelectedContactIds(new Set())
                                 setSelectedTemplate('')
