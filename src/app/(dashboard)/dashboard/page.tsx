@@ -323,7 +323,7 @@ export default function DashboardPage() {
                             <a href="/contacts/import" className="px-5 py-2.5 bg-white text-red-600 font-semibold rounded-lg shadow-lg hover:bg-gray-50 transition-colors">
                                 Importar Contactos
                             </a>
-                            <a href="/campaigns/new" className="px-5 py-2.5 bg-blue-800/50 text-white font-semibold rounded-lg backdrop-blur-sm hover:bg-blue-800/70 transition-colors border border-blue-400/30">
+                            <a href="/send" className="px-5 py-2.5 bg-blue-800/50 text-white font-semibold rounded-lg backdrop-blur-sm hover:bg-blue-800/70 transition-colors border border-blue-400/30">
                                 Crear Campaña
                             </a>
                         </div>
@@ -375,16 +375,24 @@ export default function DashboardPage() {
                                         <div className="w-full flex flex-col gap-0.5" style={{ height: '140px' }}>
                                             {/* Received bar */}
                                             <div
-                                                className="w-full bg-green-400 rounded-t transition-all duration-500"
+                                                className="w-full bg-green-400 rounded-t transition-all duration-500 relative flex items-center justify-center"
                                                 style={{ height: `${(day.received / maxBarValue) * 100}%` }}
                                                 title={`Recibidos: ${day.received}`}
-                                            />
+                                            >
+                                                {day.received > 0 && (
+                                                    <span className="text-[10px] sm:text-xs font-bold text-green-900 absolute">{day.received}</span>
+                                                )}
+                                            </div>
                                             {/* Sent bar */}
                                             <div
-                                                className="w-full bg-primary-500 rounded-b transition-all duration-500"
+                                                className="w-full bg-primary-500 rounded-b transition-all duration-500 relative flex items-center justify-center"
                                                 style={{ height: `${(day.sent / maxBarValue) * 100}%` }}
                                                 title={`Enviados: ${day.sent}`}
-                                            />
+                                            >
+                                                {day.sent > 0 && (
+                                                    <span className="text-[10px] sm:text-xs font-bold text-white absolute">{day.sent}</span>
+                                                )}
+                                            </div>
                                         </div>
                                         <span className="text-xs text-gray-500">{day.day}</span>
                                     </div>
@@ -500,7 +508,7 @@ export default function DashboardPage() {
                                 </a>
 
                                 <a
-                                    href="/campaigns/new"
+                                    href="/send"
                                     className="flex items-center gap-3 p-4 rounded-xl border border-gray-200 hover:border-green-300 hover:bg-green-50 transition-colors"
                                 >
                                     <div className="p-2 bg-green-100 rounded-lg">
@@ -508,20 +516,20 @@ export default function DashboardPage() {
                                     </div>
                                     <div>
                                         <p className="font-medium text-gray-900">Nueva Campaña</p>
-                                        <p className="text-sm text-gray-500">Envío masivo</p>
+                                        <p className="text-sm text-gray-500">Envío manual</p>
                                     </div>
                                 </a>
 
                                 <a
-                                    href="/chats"
+                                    href="/messages"
                                     className="flex items-center gap-3 p-4 rounded-xl border border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-colors"
                                 >
                                     <div className="p-2 bg-purple-100 rounded-lg">
                                         <MessageSquare className="h-5 w-5 text-purple-600" />
                                     </div>
                                     <div>
-                                        <p className="font-medium text-gray-900">Chats</p>
-                                        <p className="text-sm text-gray-500">Ver mensajes</p>
+                                        <p className="font-medium text-gray-900">Mensajes</p>
+                                        <p className="text-sm text-gray-500">Historial de envíos</p>
                                     </div>
                                 </a>
 
@@ -578,7 +586,7 @@ export default function DashboardPage() {
                 <Card>
                     <div className="flex items-center justify-between mb-4">
                         <CardTitle>Conversaciones Recientes</CardTitle>
-                        <a href="/chats" className="text-sm text-primary-600 hover:underline">Ver todas →</a>
+                        <a href="/messages" className="text-sm text-primary-600 hover:underline">Ver todos →</a>
                     </div>
                     <CardContent>
                         {recentConversations.length === 0 ? (
@@ -591,7 +599,7 @@ export default function DashboardPage() {
                                 {recentConversations.map((conv, index) => (
                                     <a
                                         key={index}
-                                        href="/chats"
+                                        href="/messages"
                                         className="flex items-center gap-4 py-3 hover:bg-gray-50 -mx-4 px-4 transition-colors"
                                     >
                                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-semibold">

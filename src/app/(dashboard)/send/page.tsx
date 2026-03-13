@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { DashboardLayout } from '@/components/layout'
 import { Button } from '@/components/ui'
 import { useAuth } from '@/hooks/useAuth'
@@ -22,6 +22,7 @@ import {
     List,
     Zap
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 interface Template {
     id: string
@@ -40,38 +41,10 @@ interface Contact {
     skipped: boolean
 }
 
-const SESSION_KEY = 'creditcol_manual_send_session'
-
-interface SavedSession {
-    step: 'sending'
-    campaignName: string
-    selectedTemplate: string
-    selectedPackage: string
-    contacts: Contact[]
-    currentIndex: number
-    sentCount: number
-    skippedCount: number
-    savedAt: string
-}
-
-function saveSession(data: SavedSession) {
-    try { localStorage.setItem(SESSION_KEY, JSON.stringify(data)) } catch { }
-}
-
-function loadSession(): SavedSession | null {
-    try {
-        const raw = localStorage.getItem(SESSION_KEY)
-        if (!raw) return null
-        return JSON.parse(raw) as SavedSession
-    } catch { return null }
-}
-
-function clearSession() {
-    try { localStorage.removeItem(SESSION_KEY) } catch { }
-}
-
 export default function ManualSendPage() {
     const { user, profile } = useAuth()
+    const router = useRouter()
+    
     const [step, setStep] = useState<'setup' | 'sending' | 'done'>('setup')
     const [templates, setTemplates] = useState<Template[]>([])
     const [selectedTemplate, setSelectedTemplate] = useState<string>('')
@@ -86,14 +59,55 @@ export default function ManualSendPage() {
     const [skippedCount, setSkippedCount] = useState(0)
     const [packages, setPackages] = useState<any[]>([])
     const [selectedPackage, setSelectedPackage] = useState<string>('all')
-    const [savedSession, setSavedSession] = useState<SavedSession | null>(null)
-    const [sessionBannerDismissed, setSessionBannerDismissed] = useState(false)
+    const [currentCampaignId, setCurrentCampaignId] = useState<string | null>(null)
 
-    // Check for a saved session on first load
+    // Used to prevent infinite loop on auto-saving
+    const isRestoring = useRef(false)
+
+    // Detect if we are resuming a campaign from URL parameter
     useEffect(() => {
-        const session = loadSession()
-        if (session) setSavedSession(session)
-    }, [])
+        const loadCampaignFromDB = async (cid: string) => {
+            if (!user) return
+            setLoading(true)
+            try {
+                isRestoring.current = true
+                const { data: campaign } = await supabase.from('campaigns').select('*').eq('id', cid).single()
+                
+                if (campaign) {
+                    setCurrentCampaignId(campaign.id)
+                    setCampaignName(campaign.name)
+                    setSelectedTemplate(campaign.template_id || '')
+                    setSentCount(campaign.messages_sent || 0)
+                    setSkippedCount(campaign.messages_failed || 0)
+                    
+                    if (campaign.target_filter) {
+                        const filter = campaign.target_filter as any
+                        setContacts(filter.contacts || [])
+                        setCurrentIndex(filter.currentIndex || 0)
+                        setSelectedPackage(filter.selectedPackage || 'all')
+                    }
+                    
+                    if (campaign.status === 'completed') {
+                        setStep('done')
+                    } else {
+                        setStep('sending')
+                    }
+                }
+            } catch (error) {
+                console.error("Error loading campaign:", error)
+            } finally {
+                setLoading(false)
+                isRestoring.current = false
+            }
+        }
+
+        const params = new URLSearchParams(window.location.search)
+        const cid = params.get('campaignId')
+        
+        if (cid) {
+            loadCampaignFromDB(cid)
+        }
+    }, [user])
 
     // Load templates and packages
     useEffect(() => {
@@ -122,7 +136,8 @@ export default function ManualSendPage() {
     }, [user])
 
     const loadContacts = useCallback(async (packageId: string) => {
-        if (!user) return
+        if (!user || currentCampaignId) return // Do not load general contacts if we are resuming a campaign
+        
         setLoading(true)
         setSelectedContactIds(new Set())
         setSelectAll(false)
@@ -141,39 +156,42 @@ export default function ManualSendPage() {
 
         setContacts((data || []).map(c => ({ ...c, sent: false, skipped: false })))
         setLoading(false)
-    }, [user])
+    }, [user, currentCampaignId])
 
     useEffect(() => {
-        if (user) loadContacts(selectedPackage)
-    }, [user, loadContacts, selectedPackage])
+        if (user && !currentCampaignId) {
+            loadContacts(selectedPackage)
+        }
+    }, [user, loadContacts, selectedPackage, currentCampaignId])
 
-    // Persist session every time key state changes while in 'sending' step
+    // Auto save progress to DB
     useEffect(() => {
-        if (step !== 'sending') return
-        saveSession({
-            step: 'sending',
-            campaignName,
-            selectedTemplate,
-            selectedPackage,
-            contacts,
-            currentIndex,
-            sentCount,
-            skippedCount,
-            savedAt: new Date().toISOString(),
-        })
-    }, [step, contacts, currentIndex, sentCount, skippedCount, campaignName, selectedTemplate, selectedPackage])
+        if (isRestoring.current || !currentCampaignId || step === 'setup') return
 
-    const resumeSession = (session: SavedSession) => {
-        setStep(session.step)
-        setCampaignName(session.campaignName)
-        setSelectedTemplate(session.selectedTemplate)
-        setSelectedPackage(session.selectedPackage)
-        setContacts(session.contacts)
-        setCurrentIndex(session.currentIndex)
-        setSentCount(session.sentCount)
-        setSkippedCount(session.skippedCount)
-        setSavedSession(null)
-    }
+        const updateCampaignProgress = async () => {
+            try {
+                const isCompleted = step === 'done' || currentIndex >= contacts.length;
+                await supabase.from('campaigns').update({
+                    messages_sent: sentCount,
+                    messages_failed: skippedCount,
+                    status: isCompleted ? 'completed' : 'sending',
+                    completed_at: isCompleted ? new Date().toISOString() : null,
+                    target_filter: { 
+                        selectedPackage, 
+                        currentIndex, 
+                        contacts 
+                    }
+                }).eq('id', currentCampaignId)
+            } catch (error) {
+                console.error("Error updating campaign progress:", error)
+            }
+        }
+
+        // Debounce slightly just in case
+        const timeout = setTimeout(updateCampaignProgress, 300)
+        return () => clearTimeout(timeout)
+
+    }, [step, contacts, currentIndex, sentCount, skippedCount, currentCampaignId, selectedPackage])
 
     const formatName = (fullName: string | null): string => {
         if (!fullName) return '';
@@ -206,7 +224,7 @@ export default function ManualSendPage() {
         if (step !== 'sending') return
 
         const handleKeyDown = (e: KeyboardEvent) => {
-            // Do not trigger if user is typing in an input (though there are none in this step)
+            // Do not trigger if user is typing in an input text/textarea
             if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
 
             if (e.key === 'Enter') {
@@ -238,20 +256,53 @@ export default function ManualSendPage() {
         return `https://wa.me/${cleanPhone}?text=${encodedMessage}`
     }
 
-    const handleStartSending = () => {
-        if (!selectedTemplate || selectedContactIds.size === 0 || !campaignName.trim()) return
+    const handleStartSending = async () => {
+        if (!user || !selectedTemplate || selectedContactIds.size === 0 || !campaignName.trim()) return
+
+        setLoading(true)
 
         // Filter contacts to only selected ones
         const selectedContacts = contacts
             .filter(c => selectedContactIds.has(c.id))
             .map(c => ({ ...c, sent: false, skipped: false }))
 
-        setContacts(selectedContacts)
-        setCurrentIndex(0)
-        setSentCount(0)
-        setSkippedCount(0)
-        clearSession() // clear any old session before starting fresh
-        setStep('sending')
+        try {
+            // Create database record
+            const { data, error } = await supabase.from('campaigns').insert({
+                user_id: user.id,
+                name: campaignName,
+                template_id: selectedTemplate,
+                send_type: 'manual',
+                status: 'sending',
+                total_contacts: selectedContacts.length,
+                messages_sent: 0,
+                messages_failed: 0,
+                target_filter: { 
+                    selectedPackage, 
+                    selectedContactIds: Array.from(selectedContactIds), 
+                    currentIndex: 0, 
+                    contacts: selectedContacts 
+                }
+            }).select().single()
+
+            if (data) {
+                setCurrentCampaignId(data.id)
+                // Update URL quietly to support refresh
+                window.history.replaceState(null, '', `?campaignId=${data.id}`)
+            }
+
+            setContacts(selectedContacts)
+            setCurrentIndex(0)
+            setSentCount(0)
+            setSkippedCount(0)
+            setStep('sending')
+
+        } catch (err) {
+            console.error("Error creating campaign:", err)
+            alert("Error al iniciar campaña, intenta de nuevo.")
+        } finally {
+            setLoading(false)
+        }
     }
 
     const handleSendCurrent = () => {
@@ -266,10 +317,8 @@ export default function ManualSendPage() {
         const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
 
         if (isMobile) {
-            // For mobile, location.href is often better to trigger app intent
             window.location.href = link
         } else {
-            // Desktop
             window.open(link, '_blank')
         }
 
@@ -281,6 +330,7 @@ export default function ManualSendPage() {
 
         // Log to database
         if (user) {
+            // Log as system activity
             supabase.from('system_logs').insert({
                 user_id: user.id,
                 action_type: 'manual_message_sent',
@@ -292,6 +342,18 @@ export default function ManualSendPage() {
                     template_id: selectedTemplate,
                     campaign_name: campaignName
                 }
+            }).then(() => { })
+
+            // Insert into messages table so that dashboard stats ("Mensajes Enviados") see it
+            supabase.from('messages').insert({
+                user_id: user.id,
+                contact_id: contact.id,
+                template_id: selectedTemplate,
+                content: message,
+                phone: contact.phone,
+                status: 'sent',
+                provider: 'manual',
+                sent_at: new Date().toISOString()
             }).then(() => { })
         }
 
@@ -323,7 +385,7 @@ export default function ManualSendPage() {
             setSelectedContactIds(new Set())
         } else {
             const filtered = contacts.filter(c =>
-                c.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                c.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 c.phone.includes(searchTerm)
             )
             setSelectedContactIds(new Set(filtered.map(c => c.id)))
@@ -356,36 +418,9 @@ export default function ManualSendPage() {
     return (
         <DashboardLayout
             title="Envío Manual"
-            subtitle="Envía mensajes uno por uno a través de WhatsApp"
+            subtitle={currentCampaignId ? `Campaña en progreso: ${campaignName}` : "Envía mensajes uno por uno a través de WhatsApp"}
             user={profile ? { name: profile.full_name || 'Usuario', email: profile.email } : undefined}
         >
-            {/* Resume Session Banner */}
-            {savedSession && !sessionBannerDismissed && (
-                <div className="mb-6 bg-amber-50 border border-amber-300 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
-                    <div>
-                        <p className="font-semibold text-amber-800">📂 Sesión de envío guardada</p>
-                        <p className="text-sm text-amber-700 mt-0.5">
-                            Campaña: <strong>{savedSession.campaignName}</strong> —
-                            {savedSession.sentCount} enviados, {savedSession.skippedCount} omitidos, en el contacto #{savedSession.currentIndex + 1} de {savedSession.contacts.length}.
-                            Guardado el {new Date(savedSession.savedAt).toLocaleString('es-CO')}.
-                        </p>
-                    </div>
-                    <div className="flex gap-2 flex-shrink-0">
-                        <button
-                            onClick={() => resumeSession(savedSession)}
-                            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-semibold transition-colors"
-                        >
-                            ▶ Continuar sesión
-                        </button>
-                        <button
-                            onClick={() => { clearSession(); setSavedSession(null) }}
-                            className="px-4 py-2 bg-white border border-amber-300 hover:bg-amber-50 text-amber-700 rounded-lg text-sm font-medium transition-colors"
-                        >
-                            Descartar
-                        </button>
-                    </div>
-                </div>
-            )}
 
             {/* Step: SETUP */}
             {step === 'setup' && (
@@ -394,11 +429,11 @@ export default function ManualSendPage() {
                     <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
                         <div className="flex items-center gap-3 mb-2">
                             <Zap className="h-6 w-6" />
-                            <h2 className="text-xl font-bold">Envío Manual de WhatsApp</h2>
+                            <h2 className="text-xl font-bold">Crear Campaña de Envío Manual</h2>
                         </div>
                         <p className="text-green-100 text-sm">
-                            Sin API, sin Twilio, sin restricciones. Selecciona una plantilla y tus contactos —
-                            se abrirá WhatsApp con el mensaje personalizado listo para enviar.
+                            Tu campaña se guardará en la base de datos automáticamente. 
+                            Podrás pausarla y retomarla desde la sección "Campañas" cuando desees.
                         </p>
                     </div>
 
@@ -541,11 +576,15 @@ export default function ManualSendPage() {
                     <div className="flex justify-center pt-2 pb-8">
                         <Button
                             onClick={handleStartSending}
-                            disabled={!selectedTemplate || selectedContactIds.size === 0 || !campaignName.trim()}
+                            disabled={!selectedTemplate || selectedContactIds.size === 0 || !campaignName.trim() || loading}
                             className="!px-8 !py-3 !text-base !rounded-xl !bg-green-600 hover:!bg-green-700 disabled:!opacity-50 disabled:!cursor-not-allowed"
                         >
-                            <Send className="h-5 w-5 mr-2" />
-                            Comenzar envío ({selectedContactIds.size} contactos)
+                            {loading ? (
+                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" />
+                            ) : (
+                                <Send className="h-5 w-5 mr-2" />
+                            )}
+                            Guardar y Comenzar envío ({selectedContactIds.size} contactos)
                         </Button>
                     </div>
                 </div>
@@ -683,8 +722,8 @@ export default function ManualSendPage() {
                         <CheckCircle2 className="h-12 w-12 text-green-500" />
                     </div>
                     <div>
-                        <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Envío completado!</h2>
-                        <p className="text-gray-500">Campaña: <strong>{campaignName}</strong></p>
+                        <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Campaña completada!</h2>
+                        <p className="text-gray-500">Nombre: <strong>{campaignName}</strong></p>
                     </div>
 
                     <div className="grid grid-cols-3 gap-4">
@@ -732,15 +771,12 @@ export default function ManualSendPage() {
                         <Button
                             variant="outline"
                             onClick={() => {
-                                clearSession()
-                                setStep('setup')
-                                setSelectedContactIds(new Set())
-                                setSelectedTemplate('')
-                                setCampaignName('')
-                                loadContacts(selectedPackage)
+                                // Reset to clean slate natively via router
+                                router.replace('/send')
+                                setTimeout(() => window.location.reload(), 100)
                             }}
                         >
-                            <RotateCcw className="h-4 w-4 mr-2" /> Nueva campaña
+                            <RotateCcw className="h-4 w-4 mr-2" /> Crear nueva campaña
                         </Button>
                     </div>
                 </div>
