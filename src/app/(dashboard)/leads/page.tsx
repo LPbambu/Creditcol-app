@@ -6,7 +6,7 @@ import { Card, Button, Input, Modal } from '@/components/ui'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Pagination } from '@/components/ui/Table'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
-import { Phone, FileText, Search, MessageCircle } from 'lucide-react'
+import { Phone, FileText, Search, MessageCircle, Trash2 } from 'lucide-react'
 
 // types
 export interface Lead {
@@ -89,6 +89,27 @@ export default function LeadsPage() {
             console.error('Error updating status:', error)
             alert('Error al actualizar el estado')
             loadLeads() // re-fetch to fix UI
+        }
+    }
+
+    const handleDeleteLead = async (leadId: string) => {
+        if (!window.confirm('¿Estás seguro de que deseas eliminar este prospecto? Esta acción no se puede deshacer.')) {
+            return
+        }
+
+        try {
+            const { error } = await supabase
+                .from('leads')
+                .delete()
+                .eq('id', leadId)
+
+            if (error) throw error
+
+            setLeads(prevLeads => prevLeads.filter(l => l.id !== leadId))
+            setTotalCount(prev => prev - 1)
+        } catch (error) {
+            console.error('Error deleting lead:', error)
+            alert('Error al eliminar el prospecto')
         }
     }
 
@@ -228,15 +249,15 @@ export default function LeadsPage() {
                                                 </TableCell>
                                                 <TableCell>
                                                     <select
-                                                        value={lead.estado || 'Nuevo'}
+                                                        value={lead.estado?.toLowerCase() || 'nuevo'}
                                                         onChange={(e) => handleStatusChange(lead.id, e.target.value)}
-                                                        className={`text-sm rounded-full px-3 py-1 font-medium border appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary-500 ${getStatusColor(lead.estado || 'Nuevo')}`}
+                                                        className={`text-sm rounded-full px-3 py-1 font-medium border appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary-500 ${getStatusColor(lead.estado || 'nuevo')}`}
                                                     >
-                                                        <option value="Nuevo">Nuevo</option>
-                                                        <option value="Contactado">Contactado</option>
-                                                        <option value="En evaluación">En evaluación</option>
-                                                        <option value="Aprobado">Aprobado</option>
-                                                        <option value="Rechazado">Rechazado</option>
+                                                        <option value="nuevo">Nuevo</option>
+                                                        <option value="contactado">Contactado</option>
+                                                        <option value="en evaluación">En evaluación</option>
+                                                        <option value="aprobado">Aprobado</option>
+                                                        <option value="rechazado">Rechazado</option>
                                                     </select>
                                                 </TableCell>
                                                 <TableCell>
@@ -263,6 +284,13 @@ export default function LeadsPage() {
                                                         >
                                                             <MessageCircle className="h-4 w-4" />
                                                             Contactar
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteLead(lead.id)}
+                                                            className="flex items-center gap-2 px-2 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-transform hover:scale-105 active:scale-95 text-sm font-medium border border-red-200"
+                                                            title="Eliminar"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
                                                         </button>
                                                     </div>
                                                 </TableCell>
