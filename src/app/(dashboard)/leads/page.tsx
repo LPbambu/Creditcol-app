@@ -24,6 +24,7 @@ export interface Lead {
 export default function LeadsPage() {
     const { user, profile } = useAuth()
     const [leads, setLeads] = useState<Lead[]>([])
+    const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set())
     const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
     const [currentPage, setCurrentPage] = useState(1)
@@ -45,6 +46,7 @@ export default function LeadsPage() {
     const loadLeads = async () => {
         if (!user) return
         setLoading(true)
+        setSelectedLeads(new Set())
         try {
             let query = supabase
                 .from('leads')
@@ -110,6 +112,70 @@ export default function LeadsPage() {
         } catch (error) {
             console.error('Error deleting lead:', error)
             alert('Error al eliminar el prospecto')
+        }
+    }
+
+    const toggleSelectAll = () => {
+        if (selectedLeads.size === leads.length) {
+            setSelectedLeads(new Set())
+        } else {
+            setSelectedLeads(new Set(leads.map(l => l.id)))
+        }
+    }
+
+    const toggleSelectLead = (id: string) => {
+        const newSet = new Set(selectedLeads)
+        if (newSet.has(id)) {
+            newSet.delete(id)
+        } else {
+            newSet.add(id)
+        }
+        setSelectedLeads(newSet)
+    }
+
+    const handleBulkDelete = async () => {
+        if (!window.confirm(`¿Estás seguro de eliminar los ${selectedLeads.size} prospectos seleccionados? Esta acción no se puede deshacer.`)) {
+            return
+        }
+        
+        try {
+            const { error } = await supabase
+                .from('leads')
+                .delete()
+                .in('id', Array.from(selectedLeads))
+                
+            if (error) throw error
+            
+            setLeads(prevLeads => prevLeads.filter(l => !selectedLeads.has(l.id)))
+            setTotalCount(prev => prev - selectedLeads.size)
+            setSelectedLeads(new Set())
+        } catch (error) {
+            console.error('Error deleting leads:', error)
+            alert('Error al eliminar los prospectos')
+        }
+    }
+
+    const [bulkStatus, setBulkStatus] = useState('')
+
+    const handleBulkStatusChange = async (newStatus: string) => {
+        if (!newStatus) return
+        
+        try {
+            const { error } = await supabase
+                .from('leads')
+                .update({ estado: newStatus })
+                .in('id', Array.from(selectedLeads))
+                
+            if (error) throw error
+            
+            setLeads(prevLeads => prevLeads.map(l => 
+                selectedLeads.has(l.id) ? { ...l, estado: newStatus } : l
+            ))
+            setSelectedLeads(new Set())
+            setBulkStatus('')
+        } catch (error) {
+            console.error('Error updating status:', error)
+            alert('Error al actualizar los estados')
         }
     }
 
@@ -186,6 +252,34 @@ export default function LeadsPage() {
                             className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                         />
                     </div>
+                    {selectedLeads.size > 0 && (
+                        <div className="flex flex-wrap items-center gap-3 bg-primary-50 px-4 py-2 rounded-lg border border-primary-100 min-w-max">
+                            <span className="text-sm font-medium text-primary-700">
+                                {selectedLeads.size} seleccionados
+                            </span>
+                            <select
+                                value={bulkStatus}
+                                onChange={(e) => {
+                                    setBulkStatus(e.target.value)
+                                    handleBulkStatusChange(e.target.value)
+                                }}
+                                className="text-sm border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500 bg-white/50"
+                            >
+                                <option value="">Cambiar estado...</option>
+                                <option value="nuevo">Nuevo</option>
+                                <option value="contactado">Contactado</option>
+                                <option value="en evaluación">En evaluación</option>
+                                <option value="aprobado">Aprobado</option>
+                                <option value="rechazado">Rechazado</option>
+                            </select>
+                            <button
+                                onClick={handleBulkDelete}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 rounded-md text-sm font-medium transition-colors"
+                            >
+                                <Trash2 className="h-4 w-4" /> Eliminar
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <Card padding={false}>
@@ -206,6 +300,14 @@ export default function LeadsPage() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
+                                            <TableHead className="w-12">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={leads.length > 0 && selectedLeads.size === leads.length}
+                                                    onChange={toggleSelectAll}
+                                                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                                                />
+                                            </TableHead>
                                             <TableHead>Ingreso</TableHead>
                                             <TableHead>Prospecto</TableHead>
                                             <TableHead>Perfil</TableHead>
@@ -216,7 +318,15 @@ export default function LeadsPage() {
                                     </TableHeader>
                                     <TableBody>
                                         {leads.map((lead) => (
-                                            <TableRow key={lead.id} className="hover:bg-slate-50 transition-colors">
+                                            <TableRow key={lead.id} className={`hover:bg-slate-50 transition-colors ${selectedLeads.has(lead.id) ? 'bg-primary-50/50' : ''}`}>
+                                                <TableCell>
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={selectedLeads.has(lead.id)}
+                                                        onChange={() => toggleSelectLead(lead.id)}
+                                                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                                                    />
+                                                </TableCell>
                                                 <TableCell className="text-sm text-gray-500 truncate whitespace-nowrap">
                                                     {new Date(lead.created_at).toLocaleDateString()}
                                                 </TableCell>

@@ -55,6 +55,19 @@ export default function CampaignsPage() {
     }, [user, loadCampaigns])
 
 
+    const markCampaignCompleted = async (campaignId: string) => {
+        if (!confirm('¿Estás seguro de marcar esta campaña como Finalizada?')) return
+
+        try {
+            const completedDate = new Date().toISOString()
+            await supabase.from('campaigns').update({ status: 'completed', completed_at: completedDate }).eq('id', campaignId)
+            setCampaigns(campaigns.map(c => c.id === campaignId ? { ...c, status: 'completed', completed_at: completedDate } : c))
+        } catch (error) {
+            console.error('Error completing campaign:', error)
+        }
+        setOpenMenuId(null)
+    }
+
     const deleteCampaign = async (campaignId: string) => {
         if (!confirm('¿Estás seguro de eliminar esta campaña?')) return
 
@@ -220,12 +233,20 @@ export default function CampaignsPage() {
                                                     </button>
                                                     
                                                     {campaign.status !== 'completed' && (
-                                                        <button
-                                                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-blue-600 hover:bg-blue-50"
-                                                            onClick={() => continueCampaign(campaign.id)}
-                                                        >
-                                                            <Send className="h-4 w-4" /> Continuar envío
-                                                        </button>
+                                                        <>
+                                                            <button
+                                                                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-green-600 hover:bg-green-50"
+                                                                onClick={() => markCampaignCompleted(campaign.id)}
+                                                            >
+                                                                <CheckCircle className="h-4 w-4" /> Finalizar campaña
+                                                            </button>
+                                                            <button
+                                                                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-blue-600 hover:bg-blue-50"
+                                                                onClick={() => continueCampaign(campaign.id)}
+                                                            >
+                                                                <Send className="h-4 w-4" /> Continuar envío
+                                                            </button>
+                                                        </>
                                                     )}
 
                                                     <button
