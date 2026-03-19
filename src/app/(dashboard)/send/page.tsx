@@ -159,7 +159,10 @@ export default function ManualSendPage() {
     }, [user, currentCampaignId])
 
     useEffect(() => {
-        if (user && !currentCampaignId) {
+        const params = new URLSearchParams(window.location.search)
+        const isResuming = params.has('campaignId')
+
+        if (user && !currentCampaignId && !isResuming) {
             loadContacts(selectedPackage)
         }
     }, [user, loadContacts, selectedPackage, currentCampaignId])
