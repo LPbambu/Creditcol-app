@@ -196,6 +196,10 @@ export default function ManualSendPage() {
 
     }, [step, contacts, currentIndex, sentCount, skippedCount, currentCampaignId, selectedPackage])
 
+    /**
+     * DB name format: APELLIDO1 APELLIDO2 NOMBRE1 NOMBRE2
+     * Returns: "Primer_nombre Primer_apellido"
+     */
     const formatName = (fullName: string | null): string => {
         if (!fullName) return '';
         const parts = fullName.trim().toLowerCase().split(/\s+/);
@@ -204,21 +208,94 @@ export default function ManualSendPage() {
         const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.slice(1);
 
         if (parts.length === 1) return capitalize(parts[0]);
-        if (parts.length === 2) return `${capitalize(parts[0])} ${capitalize(parts[1])}`;
-        if (parts.length === 3) return `${capitalize(parts[0])} ${capitalize(parts[1])}`; // Name1 Surname1
+        // 2 words: could be APELLIDO NOMBRE → show NOMBRE APELLIDO
+        if (parts.length === 2) return `${capitalize(parts[1])} ${capitalize(parts[0])}`;
+        // 3 words: APELLIDO1 APELLIDO2 NOMBRE1 → show NOMBRE1 APELLIDO1
+        if (parts.length === 3) return `${capitalize(parts[2])} ${capitalize(parts[0])}`;
+        // 4+ words: APELLIDO1 APELLIDO2 NOMBRE1 NOMBRE2 → show NOMBRE1 APELLIDO1
+        return `${capitalize(parts[2])} ${capitalize(parts[0])}`;
+    }
 
-        // Typical structure: Name1 Name2 Surname1 Surname2 -> parts[0] + parts[2]
-        return `${capitalize(parts[0])} ${capitalize(parts[2])}`;
+    /**
+     * List of common Colombian male first names (lowercase)
+     * Used for gender detection based on DB name format: APELLIDO1 APELLIDO2 NOMBRE1 NOMBRE2
+     * The first name is at index 2 (or 1 if only 2 words)
+     */
+    const MALE_NAMES = new Set([
+        'alejandro','alfredo','alvaro','andres','angel','antonio','armando','augusto','bernardo',
+        'carlos','cesar','christian','claudio','cristian','daniel','david','diego','edgar','eduardo',
+        'edwin','emilio','enrique','ernesto','esteban','fabian','federico','felipe','fernando',
+        'francisco','freddy','gabriel','gerardo','gonzalo','guillermo','gustavo','harold','hector',
+        'henry','herman','hernando','hugo','ignacio','ivan','javier','jesus','jhon','john','jorge',
+        'jose','juan','julio','kevin','leonardo','luis','manuel','mario','martin','mauricio','miguel',
+        'nelson','nicolas','oscar','pablo','pedro','rafael','raul','ricardo','roberto','rodrigo',
+        'samuel','santiago','sergio','simon','steven','tomas','victor','william','wilson','xavier',
+        'yesid','yordan','yohan','camilo','brayan','brandon','alexis','alex','abel','adan','adonis',
+        'agustin','alan','albert','alberto','aldo','alejandro','alejo','alexei','alonso','amadeo',
+        'amilcar','amos','anaclet','anastasio','anatolio'
+    ])
+
+    const FEMALE_NAMES = new Set([
+        'adriana','alejandra','alexandra','alice','alicia','amanda','amparo','ana','andrea','angela',
+        'angelica','angie','anna','beatriz','blanca','camila','carolina','catalina','cecilia','clara',
+        'claudia','constanza','cristina','daniela','diana','dolores','elizabeth','erika','esperanza',
+        'estela','eugenia','eva','fatima','fernanda','flor','gabriela','gloria','graciela','ingrid',
+        'irene','isabel','jackeline','jennifer','jessica','jimena','johana','juanita','juliana','karina',
+        'karen','kelly','laura','leidy','lina','lorena','lucia','luisa','luz','magnolia','marcela',
+        'margarita','maria','mariana','martha','melissa','mercedes','milena','monica','natalia','nelly',
+        'nidia','norma','olga','paola','patricia','paula','pilar','rosa','rosario','ruth','sandra',
+        'sara','silvia','sonia','stefania','susana','tatiana','valentina','vanessa','veronica','victoria',
+        'viviana','xiomara','ximena','yesenia','yolanda','zulma','alba','beatriz','belen','blanca',
+        'brenda','brigitte','cindy','daiana','daisy','danna','daria','diana','eliana','eloisa','emilia'
+    ])
+
+    /**
+     * Detects gender from DB name format: APELLIDO1 APELLIDO2 NOMBRE1 NOMBRE2
+     * Returns 'M', 'F', or 'U' (unknown)
+     */
+    const detectGender = (fullName: string | null): 'M' | 'F' | 'U' => {
+        if (!fullName) return 'U';
+        const parts = fullName.trim().toLowerCase().split(/\s+/);
+        // First name is at index 2 (4 parts) or index 1 (2 parts) or index 2 (3 parts)
+        let firstName = ''
+        if (parts.length >= 3) firstName = parts[2]
+        else if (parts.length === 2) firstName = parts[1]
+        else firstName = parts[0]
+
+        if (MALE_NAMES.has(firstName)) return 'M'
+        if (FEMALE_NAMES.has(firstName)) return 'F'
+        return 'U'
     }
 
     const personalizeMessage = (template: string, contact: Contact): string => {
         let msg = template
         const formattedName = formatName(contact.full_name)
+        const gender = detectGender(contact.full_name)
+
+        // Name replacements
         msg = msg.replace(/\{\{nombre\}\}/gi, formattedName)
         msg = msg.replace(/\{\{1\}\}/gi, formattedName)
         msg = msg.replace(/\{\{telefono\}\}/gi, contact.phone || '')
         msg = msg.replace(/\{\{email\}\}/gi, contact.email || '')
         msg = msg.replace(/\{\{ciudad\}\}/gi, contact.city || '')
+
+        // Gender-adaptive replacements
+        // {{el/la}} → el or la
+        msg = msg.replace(/\{\{el\/la\}\}/gi, gender === 'F' ? 'la' : 'el')
+        msg = msg.replace(/\{\{la\/el\}\}/gi, gender === 'F' ? 'la' : 'el')
+        // {{estimado/estimada}} → estimado or estimada
+        msg = msg.replace(/\{\{estimado\/estimada\}\}/gi, gender === 'F' ? 'estimada' : 'estimado')
+        msg = msg.replace(/\{\{estimada\/estimado\}\}/gi, gender === 'F' ? 'estimada' : 'estimado')
+        // {{apreciado/apreciada}}
+        msg = msg.replace(/\{\{apreciado\/apreciada\}\}/gi, gender === 'F' ? 'apreciada' : 'apreciado')
+        msg = msg.replace(/\{\{apreciada\/apreciado\}\}/gi, gender === 'F' ? 'apreciada' : 'apreciado')
+        // {{bienvenido/bienvenida}}
+        msg = msg.replace(/\{\{bienvenido\/bienvenida\}\}/gi, gender === 'F' ? 'bienvenida' : 'bienvenido')
+        // {{nuestro/nuestra}}
+        msg = msg.replace(/\{\{nuestro\/nuestra\}\}/gi, gender === 'F' ? 'nuestra' : 'nuestro')
+        // {{del/de la}}
+        msg = msg.replace(/\{\{del\/de la\}\}/gi, gender === 'F' ? 'de la' : 'del')
+
         return msg
     }
 
@@ -256,7 +333,37 @@ export default function ManualSendPage() {
         }
         cleanPhone = cleanPhone.replace('+', '')
         const encodedMessage = encodeURIComponent(message)
+        // Use wa.me web link (works on both mobile and desktop WhatsApp app)
         return `https://wa.me/${cleanPhone}?text=${encodedMessage}`
+    }
+
+    /**
+     * Opens WhatsApp directly without opening a browser tab.
+     * On desktop: uses the whatsapp:// URI scheme to launch the installed app.
+     * On mobile: uses window.location.href with wa.me link to redirect to the app.
+     */
+    const openWhatsApp = (phone: string, message: string) => {
+        let cleanPhone = phone.replace(/[\s\-\(\)]/g, '')
+        if (!cleanPhone.startsWith('+')) {
+            if (cleanPhone.startsWith('57')) {
+                cleanPhone = '+' + cleanPhone
+            } else {
+                cleanPhone = '+57' + cleanPhone
+            }
+        }
+        // Keep the + for whatsapp:// protocol
+        const encodedMessage = encodeURIComponent(message)
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+
+        if (isMobile) {
+            // On mobile, redirect directly to avoid browser popup
+            window.location.href = `https://wa.me/${cleanPhone.replace('+','')}?text=${encodedMessage}`
+        } else {
+            // On desktop: use the native whatsapp:// protocol to open the installed app
+            // This avoids opening the WhatsApp Web page in the browser
+            const whatsappUri = `whatsapp://send?phone=${cleanPhone}&text=${encodedMessage}`
+            window.location.href = whatsappUri
+        }
     }
 
     const handleStartSending = async () => {
@@ -314,16 +421,9 @@ export default function ManualSendPage() {
         if (!contact || !template) return
 
         const message = personalizeMessage(template.content, contact)
-        const link = getWhatsAppLink(contact.phone, message)
 
-        // Mobile optimization: try to open app directly
-        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-
-        if (isMobile) {
-            window.location.href = link
-        } else {
-            window.open(link, '_blank')
-        }
+        // Open WhatsApp natively without opening a browser page
+        openWhatsApp(contact.phone, message)
 
         // Mark as sent
         const updated = [...contacts]
