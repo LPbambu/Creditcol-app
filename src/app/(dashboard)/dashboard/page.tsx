@@ -120,28 +120,35 @@ export default function DashboardPage() {
         const data: WeeklyData[] = []
 
         for (let i = 6; i >= 0; i--) {
-            const date = new Date()
-            date.setDate(date.getDate() - i)
-            const startOfDay = new Date(date.setHours(0, 0, 0, 0)).toISOString()
-            const endOfDay = new Date(date.setHours(23, 59, 59, 999)).toISOString()
+            // Create a fresh base date for each iteration to avoid mutation bugs
+            const baseDate = new Date()
+            baseDate.setDate(baseDate.getDate() - i)
+
+            const startOfDay = new Date(baseDate)
+            startOfDay.setHours(0, 0, 0, 0)
+
+            const endOfDay = new Date(baseDate)
+            endOfDay.setHours(23, 59, 59, 999)
+
+            const dayName = days[baseDate.getDay()]
 
             const [sentRes, receivedRes] = await Promise.all([
                 supabase
                     .from('messages')
                     .select('*', { count: 'exact', head: true })
                     .in('status', ['sent', 'delivered', 'read'])
-                    .gte('sent_at', startOfDay)
-                    .lte('sent_at', endOfDay),
+                    .gte('sent_at', startOfDay.toISOString())
+                    .lte('sent_at', endOfDay.toISOString()),
                 supabase
                     .from('messages')
                     .select('*', { count: 'exact', head: true })
                     .eq('status', 'received')
-                    .gte('sent_at', startOfDay)
-                    .lte('sent_at', endOfDay),
+                    .gte('sent_at', startOfDay.toISOString())
+                    .lte('sent_at', endOfDay.toISOString()),
             ])
 
             data.push({
-                day: days[new Date(date).getDay()],
+                day: dayName,
                 sent: sentRes.count || 0,
                 received: receivedRes.count || 0,
             })
@@ -372,25 +379,25 @@ export default function DashboardPage() {
                             <div className="h-48 flex items-end justify-between gap-2">
                                 {weeklyData.map((day, index) => (
                                     <div key={index} className="flex-1 flex flex-col items-center gap-1">
-                                        <div className="w-full flex flex-col gap-0.5" style={{ height: '140px' }}>
-                                            {/* Received bar */}
+                                        <div className="w-full flex flex-col justify-end gap-0.5" style={{ height: '140px' }}>
+                                            {/* Sent bar (bottom) */}
                                             <div
-                                                className="w-full bg-green-400 rounded-t transition-all duration-500 relative flex items-center justify-center"
-                                                style={{ height: `${(day.received / maxBarValue) * 100}%` }}
-                                                title={`Recibidos: ${day.received}`}
-                                            >
-                                                {day.received > 0 && (
-                                                    <span className="text-[10px] sm:text-xs font-bold text-green-900 absolute">{day.received}</span>
-                                                )}
-                                            </div>
-                                            {/* Sent bar */}
-                                            <div
-                                                className="w-full bg-primary-500 rounded-b transition-all duration-500 relative flex items-center justify-center"
-                                                style={{ height: `${(day.sent / maxBarValue) * 100}%` }}
+                                                className="w-full bg-primary-500 rounded transition-all duration-500 relative flex items-center justify-center"
+                                                style={{ height: `${Math.max((day.sent / maxBarValue) * 100, day.sent > 0 ? 4 : 0)}%` }}
                                                 title={`Enviados: ${day.sent}`}
                                             >
                                                 {day.sent > 0 && (
                                                     <span className="text-[10px] sm:text-xs font-bold text-white absolute">{day.sent}</span>
+                                                )}
+                                            </div>
+                                            {/* Received bar (on top of sent) */}
+                                            <div
+                                                className="w-full bg-green-400 rounded transition-all duration-500 relative flex items-center justify-center"
+                                                style={{ height: `${Math.max((day.received / maxBarValue) * 100, day.received > 0 ? 4 : 0)}%` }}
+                                                title={`Recibidos: ${day.received}`}
+                                            >
+                                                {day.received > 0 && (
+                                                    <span className="text-[10px] sm:text-xs font-bold text-green-900 absolute">{day.received}</span>
                                                 )}
                                             </div>
                                         </div>

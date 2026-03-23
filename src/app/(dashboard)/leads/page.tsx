@@ -212,6 +212,7 @@ export default function LeadsPage() {
         switch(status?.toLowerCase()) {
             case 'nuevo': return 'bg-blue-100 text-blue-800 border-blue-200'
             case 'contactado': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+            case 'en proceso': return 'bg-orange-100 text-orange-800 border-orange-200'
             case 'en evaluación': return 'bg-purple-100 text-purple-800 border-purple-200'
             case 'aprobado': return 'bg-green-100 text-green-800 border-green-200'
             case 'rechazado': return 'bg-red-100 text-red-800 border-red-200'
@@ -268,6 +269,7 @@ export default function LeadsPage() {
                                 <option value="">Cambiar estado...</option>
                                 <option value="nuevo">Nuevo</option>
                                 <option value="contactado">Contactado</option>
+                                <option value="en proceso">En proceso</option>
                                 <option value="en evaluación">En evaluación</option>
                                 <option value="aprobado">Aprobado</option>
                                 <option value="rechazado">Rechazado</option>
@@ -365,6 +367,7 @@ export default function LeadsPage() {
                                                     >
                                                         <option value="nuevo">Nuevo</option>
                                                         <option value="contactado">Contactado</option>
+                                                        <option value="en proceso">En proceso</option>
                                                         <option value="en evaluación">En evaluación</option>
                                                         <option value="aprobado">Aprobado</option>
                                                         <option value="rechazado">Rechazado</option>
