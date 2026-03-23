@@ -85,12 +85,15 @@ export default function LeadsPage() {
                 .eq('id', leadId)
                 
             if (error) {
-                throw error
+                console.error('Supabase error updating status:', JSON.stringify(error))
+                alert(`Error al actualizar el estado:\n\nCódigo: ${error.code}\nMensaje: ${error.message}\nDetalle: ${error.details || 'N/A'}`)
+                loadLeads()
+                return
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error updating status:', error)
-            alert('Error al actualizar el estado')
-            loadLeads() // re-fetch to fix UI
+            alert(`Error inesperado: ${error?.message || String(error)}`)
+            loadLeads()
         }
     }
 
