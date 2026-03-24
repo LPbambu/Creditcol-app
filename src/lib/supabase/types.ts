@@ -14,6 +14,7 @@ export type Database = {
                     avatar_url: string | null
                     timezone: string
                     is_active: boolean
+                    role: 'asesor' | 'evaluador' | 'admin'
                     created_at: string
                     updated_at: string
                 }
@@ -26,6 +27,7 @@ export type Database = {
                     avatar_url?: string | null
                     timezone?: string
                     is_active?: boolean
+                    role?: 'asesor' | 'evaluador' | 'admin'
                     created_at?: string
                     updated_at?: string
                 }
@@ -38,8 +40,47 @@ export type Database = {
                     avatar_url?: string | null
                     timezone?: string
                     is_active?: boolean
+                    role?: 'asesor' | 'evaluador' | 'admin'
                     created_at?: string
                     updated_at?: string
+                }
+            }
+            approval_requests: {
+                Row: {
+                    id: string
+                    created_at: string
+                    updated_at: string
+                    nombre_cliente: string
+                    telefono: string
+                    entidades_reporte: string
+                    desprendible_url: string | null
+                    desprendible_nombre: string | null
+                    estado: 'pendiente_aprobacion' | 'aprobado' | 'descartado'
+                    asesor_id: string | null
+                    asesor_nombre: string | null
+                    evaluador_id: string | null
+                    evaluador_nombre: string | null
+                    fecha_evaluacion: string | null
+                    notas_evaluador: string | null
+                }
+                Insert: {
+                    id?: string
+                    nombre_cliente: string
+                    telefono: string
+                    entidades_reporte: string
+                    desprendible_url?: string | null
+                    desprendible_nombre?: string | null
+                    estado?: 'pendiente_aprobacion' | 'aprobado' | 'descartado'
+                    asesor_id?: string | null
+                    asesor_nombre?: string | null
+                }
+                Update: {
+                    id?: string
+                    estado?: 'pendiente_aprobacion' | 'aprobado' | 'descartado'
+                    evaluador_id?: string | null
+                    evaluador_nombre?: string | null
+                    fecha_evaluacion?: string | null
+                    notas_evaluador?: string | null
                 }
             }
             contacts: {
@@ -396,3 +437,4 @@ export type Campaign = Database['public']['Tables']['campaigns']['Row']
 export type Message = Database['public']['Tables']['messages']['Row']
 export type SystemLog = Database['public']['Tables']['system_logs']['Row']
 export type WhatsAppConfig = Database['public']['Tables']['whatsapp_config']['Row']
+export type ApprovalRequest = Database['public']['Tables']['approval_requests']['Row']

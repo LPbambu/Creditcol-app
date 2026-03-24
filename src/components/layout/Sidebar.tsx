@@ -17,18 +17,22 @@ import {
     Inbox,
     Send,
     X,
-    Target
+    Target,
+    ShieldCheck
 } from 'lucide-react'
+import { useAuth } from '@/hooks/useAuth'
 
 interface SidebarLink {
     href: string
     label: string
     icon: React.ReactNode
+    badge?: string
 }
 
 const mainLinks: SidebarLink[] = [
     { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard className="h-5 w-5" /> },
     { href: '/leads', label: 'Leads / Prospectos', icon: <Target className="h-5 w-5" /> },
+    { href: '/aprobacion', label: 'Aprobación', icon: <ShieldCheck className="h-5 w-5" /> },
     { href: '/send', label: 'Envío Manual', icon: <Send className="h-5 w-5" /> },
     { href: '/contacts', label: 'Contactos', icon: <Users className="h-5 w-5" /> },
     { href: '/messages', label: 'Mensajes', icon: <MessageSquare className="h-5 w-5" /> },
@@ -49,6 +53,7 @@ interface SidebarProps {
 
 export function Sidebar({ onLogout, isOpen = false, onClose }: SidebarProps) {
     const pathname = usePathname()
+    const { profile } = useAuth()
 
     const isActive = (href: string) => {
         if (href === '/dashboard') {
@@ -114,7 +119,12 @@ export function Sidebar({ onLogout, isOpen = false, onClose }: SidebarProps) {
                                 )}
                             >
                                 {link.icon}
-                                <span className="font-medium">{link.label}</span>
+                                <span className="font-medium flex-1">{link.label}</span>
+                                {link.href === '/aprobacion' && (profile?.role === 'evaluador' || profile?.role === 'admin') && (
+                                    <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/30 px-1.5 py-0.5 rounded-full">
+                                        Eval.
+                                    </span>
+                                )}
                             </Link>
                         ))}
                     </div>

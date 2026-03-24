@@ -33,7 +33,7 @@ export async function middleware(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
 
     // Protected paths that require authentication
-    const protectedPaths = ['/dashboard', '/contacts', '/messages', '/campaigns', '/settings', '/logs']
+    const protectedPaths = ['/dashboard', '/contacts', '/messages', '/campaigns', '/settings', '/logs', '/aprobacion', '/leads', '/send']
     const isProtectedPath = protectedPaths.some(path => request.nextUrl.pathname.startsWith(path))
 
     // Auth paths (login/register) - redirect to dashboard if already logged in
