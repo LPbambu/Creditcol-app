@@ -21,6 +21,7 @@ import {
     ShieldCheck,
     FileBadge,
     Building2,
+    Trash2,
 } from 'lucide-react'
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -322,12 +323,31 @@ function ApprovalCard({
 }) {
     const { user, profile } = useAuth()
     const [updating, setUpdating] = useState(false)
+    const [deleting, setDeleting] = useState(false)
     const [showNota, setShowNota] = useState(false)
     const [nota, setNota] = useState(req.notas_evaluador || '')
     const [showImageModal, setShowImageModal] = useState(false)
     const badge = getEstadoBadge(req.estado)
 
     const isPdf = req.desprendible_nombre?.toLowerCase().endsWith('.pdf')
+
+    const handleDelete = async () => {
+        if (!confirm('¿Seguro que deseas eliminar esta solicitud de aprobación? Esta acción no se puede deshacer.')) return;
+        setDeleting(true)
+        try {
+            const { error } = await supabase
+                .from('approval_requests')
+                .delete()
+                .eq('id', req.id);
+
+            if (error) throw error;
+            onUpdate();
+        } catch (err: any) {
+            alert('Error al eliminar: ' + err.message);
+        } finally {
+            setDeleting(false);
+        }
+    }
 
     const handleStatusChange = async (nuevoEstado: 'aprobado' | 'descartado') => {
         if (!user) return
@@ -362,9 +382,21 @@ function ApprovalCard({
                         <h3 className="font-bold text-gray-900 text-base capitalize">{req.nombre_cliente.toLowerCase()}</h3>
                         <p className="text-xs text-gray-400 mt-0.5">{formatDate(req.created_at)}</p>
                     </div>
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${badge.classes}`}>
-                        {badge.icon} {badge.label}
-                    </span>
+                    <div className="flex items-center gap-2">
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${badge.classes}`}>
+                            {badge.icon} {badge.label}
+                        </span>
+                        {(isEvaluador || req.asesor_id === user?.id) && (
+                            <button
+                                onClick={handleDelete}
+                                disabled={deleting}
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Eliminar solicitud"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Body */}
