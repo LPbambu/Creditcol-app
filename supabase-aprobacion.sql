@@ -87,6 +87,20 @@ CREATE POLICY "Evaluadores pueden actualizar estado"
         )
     );
 
+-- Asesores o evaluadores/admins pueden ELIMINAR solicitudes
+DROP POLICY IF EXISTS "Usuarios pueden eliminar solicitudes" ON approval_requests;
+CREATE POLICY "Usuarios pueden eliminar solicitudes"
+    ON approval_requests FOR DELETE
+    TO authenticated
+    USING (
+        auth.uid() = asesor_id OR 
+        EXISTS (
+            SELECT 1 FROM profiles 
+            WHERE id = auth.uid() 
+            AND role IN ('evaluador', 'admin')
+        )
+    );
+
 -- 7. Crear bucket de Storage para desprendibles
 -- (Ejecutar esto por separado si falla)
 INSERT INTO storage.buckets (id, name, public) 
