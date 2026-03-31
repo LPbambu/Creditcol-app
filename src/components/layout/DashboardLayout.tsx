@@ -3,8 +3,8 @@
 import React, { useState } from 'react'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
-import { useRouter } from 'next/navigation'
 import { Menu } from 'lucide-react'
+import { useAuth } from '@/hooks/useAuth'
 
 interface DashboardLayoutProps {
     children: React.ReactNode
@@ -24,11 +24,11 @@ export function DashboardLayout({
     user,
     padding = true,
 }: DashboardLayoutProps) {
-    const router = useRouter()
     const [sidebarOpen, setSidebarOpen] = useState(false)
+    const { logout } = useAuth()
 
-    const handleLogout = () => {
-        router.push('/login')
+    const handleLogout = async () => {
+        await logout()
     }
 
     return (
