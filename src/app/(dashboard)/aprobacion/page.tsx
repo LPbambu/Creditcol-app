@@ -81,8 +81,8 @@ function UploadForm({ onSuccess }: { onSuccess: () => void }) {
             setError('Solo se permiten archivos PNG, JPG o PDF.')
             return
         }
-        if (f.size > 10 * 1024 * 1024) {
-            setError('El archivo no puede superar 10 MB.')
+        if (f.size > 20 * 1024 * 1024) {
+            setError('El archivo no puede superar 20 MB.')
             return
         }
         setFile(f)
@@ -247,7 +247,7 @@ function UploadForm({ onSuccess }: { onSuccess: () => void }) {
                 <label className="block text-sm font-semibold text-gray-700">
                     <span className="flex items-center gap-2 mb-1.5">
                         <FileBadge className="h-4 w-4 text-primary-500" />
-                        Desprendible de pago <span className="text-gray-400 font-normal">(PNG, JPG o PDF · máx. 10 MB)</span>
+                        Desprendible de pago <span className="text-gray-400 font-normal">(PNG, JPG o PDF · máx. 20 MB)</span>
                     </span>
                 </label>
 
