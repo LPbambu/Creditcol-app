@@ -45,6 +45,34 @@ export type Database = {
                     updated_at?: string
                 }
             }
+            approval_comments: {
+                Row: {
+                    id: string
+                    approval_request_id: string
+                    author_id: string | null
+                    author_nombre: string | null
+                    author_role: string | null
+                    contenido: string | null
+                    archivos_url: string | null
+                    archivos_nombre: string | null
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    approval_request_id: string
+                    author_id?: string | null
+                    author_nombre?: string | null
+                    author_role?: string | null
+                    contenido?: string | null
+                    archivos_url?: string | null
+                    archivos_nombre?: string | null
+                }
+                Update: {
+                    contenido?: string | null
+                    archivos_url?: string | null
+                    archivos_nombre?: string | null
+                }
+            }
             approval_requests: {
                 Row: {
                     id: string
@@ -438,3 +466,4 @@ export type Message = Database['public']['Tables']['messages']['Row']
 export type SystemLog = Database['public']['Tables']['system_logs']['Row']
 export type WhatsAppConfig = Database['public']['Tables']['whatsapp_config']['Row']
 export type ApprovalRequest = Database['public']['Tables']['approval_requests']['Row']
+export type ApprovalComment = Database['public']['Tables']['approval_comments']['Row']
