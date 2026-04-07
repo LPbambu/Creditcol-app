@@ -83,7 +83,7 @@ export type Database = {
                     entidades_reporte: string
                     desprendible_url: string | null
                     desprendible_nombre: string | null
-                    estado: 'pendiente_aprobacion' | 'aprobado' | 'descartado'
+                    estado: 'pendiente_aprobacion' | 'aprobado' | 'descartado' | 'en_proceso'
                     asesor_id: string | null
                     asesor_nombre: string | null
                     evaluador_id: string | null
@@ -98,13 +98,13 @@ export type Database = {
                     entidades_reporte: string
                     desprendible_url?: string | null
                     desprendible_nombre?: string | null
-                    estado?: 'pendiente_aprobacion' | 'aprobado' | 'descartado'
+                    estado?: 'pendiente_aprobacion' | 'aprobado' | 'descartado' | 'en_proceso'
                     asesor_id?: string | null
                     asesor_nombre?: string | null
                 }
                 Update: {
                     id?: string
-                    estado?: 'pendiente_aprobacion' | 'aprobado' | 'descartado'
+                    estado?: 'pendiente_aprobacion' | 'aprobado' | 'descartado' | 'en_proceso'
                     evaluador_id?: string | null
                     evaluador_nombre?: string | null
                     fecha_evaluacion?: string | null

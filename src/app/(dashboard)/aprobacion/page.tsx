@@ -25,6 +25,7 @@ import {
     MessageSquare,
     Send,
     Paperclip,
+    Loader2,
 } from 'lucide-react'
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -42,6 +43,12 @@ function getEstadoBadge(estado: string) {
                 label: 'Descartado',
                 icon: <XCircle className="h-3.5 w-3.5" />,
                 classes: 'bg-red-100 text-red-800 border-red-200',
+            }
+        case 'en_proceso':
+            return {
+                label: 'En proceso',
+                icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
+                classes: 'bg-blue-100 text-blue-800 border-blue-200',
             }
         default:
             return {
@@ -629,7 +636,7 @@ function ApprovalCard({
         }
     }
 
-    const handleStatusChange = async (nuevoEstado: 'aprobado' | 'descartado') => {
+    const handleStatusChange = async (nuevoEstado: 'aprobado' | 'descartado' | 'en_proceso' | 'pendiente_aprobacion') => {
         if (!user) return
         setUpdating(true)
         try {
@@ -775,47 +782,60 @@ function ApprovalCard({
                     )}
                 </div>
 
-                {/* Evaluador Actions */}
-                {isEvaluador && req.estado === 'pendiente_aprobacion' && (
-                    <div className="border-t border-gray-100 p-4 bg-gray-50/50 space-y-3">
-                        {/* Nota opcional */}
-                        <div>
-                            <button
-                                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
-                                onClick={() => setShowNota(v => !v)}
-                            >
-                                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showNota ? 'rotate-180' : ''}`} />
-                                {showNota ? 'Ocultar nota' : 'Agregar nota (opcional)'}
-                            </button>
-                            {showNota && (
-                                <textarea
-                                    value={nota}
-                                    onChange={e => setNota(e.target.value)}
-                                    placeholder="Observaciones del evaluador..."
-                                    rows={2}
-                                    className="mt-2 w-full px-3 py-2 text-sm border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                                />
-                            )}
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            <button
-                                disabled={updating}
-                                onClick={() => handleStatusChange('aprobado')}
-                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
-                            >
-                                <CheckCircle2 className="h-4 w-4" /> Aprobar
-                            </button>
-                            <button
-                                disabled={updating}
-                                onClick={() => handleStatusChange('descartado')}
-                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
-                            >
-                                <XCircle className="h-4 w-4" /> Descartar
-                            </button>
-                        </div>
+                {/* Actions — todos pueden cambiar estado */}
+                <div className="border-t border-gray-100 p-4 bg-gray-50/50 space-y-3">
+                    {/* Nota opcional */}
+                    <div>
+                        <button
+                            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
+                            onClick={() => setShowNota(v => !v)}
+                        >
+                            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showNota ? 'rotate-180' : ''}`} />
+                            {showNota ? 'Ocultar nota' : 'Agregar nota (opcional)'}
+                        </button>
+                        {showNota && (
+                            <textarea
+                                value={nota}
+                                onChange={e => setNota(e.target.value)}
+                                placeholder="Observaciones..."
+                                rows={2}
+                                className="mt-2 w-full px-3 py-2 text-sm border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            />
+                        )}
                     </div>
-                )}
+
+                    <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">Cambiar estado</p>
+                    <div className="grid grid-cols-2 gap-2">
+                        <button
+                            disabled={updating || req.estado === 'aprobado'}
+                            onClick={() => handleStatusChange('aprobado')}
+                            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-200 disabled:cursor-not-allowed text-white disabled:text-emerald-400 rounded-xl text-xs font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Aprobar
+                        </button>
+                        <button
+                            disabled={updating || req.estado === 'en_proceso'}
+                            onClick={() => handleStatusChange('en_proceso')}
+                            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-200 disabled:cursor-not-allowed text-white disabled:text-blue-400 rounded-xl text-xs font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                            <Loader2 className="h-3.5 w-3.5" /> En proceso
+                        </button>
+                        <button
+                            disabled={updating || req.estado === 'pendiente_aprobacion'}
+                            onClick={() => handleStatusChange('pendiente_aprobacion')}
+                            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-200 disabled:cursor-not-allowed text-white disabled:text-amber-400 rounded-xl text-xs font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                            <Clock className="h-3.5 w-3.5" /> Pendiente
+                        </button>
+                        <button
+                            disabled={updating || req.estado === 'descartado'}
+                            onClick={() => handleStatusChange('descartado')}
+                            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-200 disabled:cursor-not-allowed text-white disabled:text-red-400 rounded-xl text-xs font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                            <XCircle className="h-3.5 w-3.5" /> Descartar
+                        </button>
+                    </div>
+                </div>
 
                 {/* ── Conversación toggle ── */}
                 <button
@@ -872,7 +892,7 @@ export default function AprobacionPage() {
     const { user, profile } = useAuth()
     const [requests, setRequests] = useState<ApprovalRequest[]>([])
     const [loading, setLoading] = useState(true)
-    const [filterEstado, setFilterEstado] = useState<'todos' | 'pendiente_aprobacion' | 'aprobado' | 'descartado'>('todos')
+    const [filterEstado, setFilterEstado] = useState<'todos' | 'pendiente_aprobacion' | 'aprobado' | 'descartado' | 'en_proceso'>('todos')
 
     const isEvaluador = profile?.role === 'evaluador' || profile?.role === 'admin'
 
@@ -904,6 +924,7 @@ export default function AprobacionPage() {
     const counts = {
         todos: requests.length,
         pendiente_aprobacion: requests.filter(r => r.estado === 'pendiente_aprobacion').length,
+        en_proceso: requests.filter(r => r.estado === 'en_proceso').length,
         aprobado: requests.filter(r => r.estado === 'aprobado').length,
         descartado: requests.filter(r => r.estado === 'descartado').length,
     }
@@ -948,10 +969,11 @@ export default function AprobacionPage() {
                         </div>
 
                         {/* Filter Tabs */}
-                        <div className="flex gap-1.5 bg-gray-100 p-1 rounded-xl">
+                        <div className="flex flex-wrap gap-1.5 bg-gray-100 p-1 rounded-xl">
                             {([
                                 { key: 'todos', label: 'Todos' },
                                 { key: 'pendiente_aprobacion', label: 'Pendientes' },
+                                { key: 'en_proceso', label: 'En proceso' },
                                 { key: 'aprobado', label: 'Aprobados' },
                                 { key: 'descartado', label: 'Descartados' },
                             ] as const).map(tab => (
