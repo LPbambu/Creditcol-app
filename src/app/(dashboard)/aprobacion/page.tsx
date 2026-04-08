@@ -26,6 +26,11 @@ import {
     Send,
     Paperclip,
     Loader2,
+    ZoomIn,
+    ChevronLeft,
+    ChevronRight,
+    Download,
+    Maximize2,
 } from 'lucide-react'
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -356,6 +361,291 @@ function UploadForm({ onSuccess }: { onSuccess: () => void }) {
     )
 }
 
+// ─── Image Viewer Modal ──────────────────────────────────────
+
+function ImageViewer({
+    urls,
+    nombres,
+    initialIndex = 0,
+    onClose,
+}: {
+    urls: string[]
+    nombres: string[]
+    initialIndex?: number
+    onClose: () => void
+}) {
+    const [current, setCurrent] = useState(initialIndex)
+    const [scale, setScale] = useState(1)
+    const [translate, setTranslate] = useState({ x: 0, y: 0 })
+    const [isDragging, setIsDragging] = useState(false)
+    const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+    const [lastTranslate, setLastTranslate] = useState({ x: 0, y: 0 })
+    // Touch pinch state
+    const lastPinchDist = useRef<number | null>(null)
+    const imgRef = useRef<HTMLImageElement>(null)
+
+    const imageUrls = urls.filter((_, i) => !nombres[i]?.toLowerCase().endsWith('.pdf'))
+    const imageNombres = nombres.filter(n => !n.toLowerCase().endsWith('.pdf'))
+
+    const reset = () => { setScale(1); setTranslate({ x: 0, y: 0 }); setLastTranslate({ x: 0, y: 0 }) }
+
+    const goTo = (idx: number) => { setCurrent(idx); reset() }
+    const goPrev = (e: React.MouseEvent) => { e.stopPropagation(); goTo((current - 1 + imageUrls.length) % imageUrls.length) }
+    const goNext = (e: React.MouseEvent) => { e.stopPropagation(); goTo((current + 1) % imageUrls.length) }
+
+    // Wheel zoom
+    const handleWheel = (e: React.WheelEvent) => {
+        e.preventDefault()
+        const delta = e.deltaY > 0 ? 0.85 : 1.18
+        setScale(s => Math.min(Math.max(s * delta, 1), 5))
+        if (scale <= 1) setTranslate({ x: 0, y: 0 })
+    }
+
+    // Mouse drag (only when zoomed)
+    const handleMouseDown = (e: React.MouseEvent) => {
+        if (scale <= 1) return
+        setIsDragging(true)
+        setDragStart({ x: e.clientX - lastTranslate.x, y: e.clientY - lastTranslate.y })
+    }
+    const handleMouseMove = (e: React.MouseEvent) => {
+        if (!isDragging) return
+        setTranslate({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y })
+    }
+    const handleMouseUp = () => {
+        setIsDragging(false)
+        setLastTranslate(translate)
+    }
+
+    // Touch pinch-to-zoom
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (e.touches.length === 2) {
+            e.preventDefault()
+            const dx = e.touches[0].clientX - e.touches[1].clientX
+            const dy = e.touches[0].clientY - e.touches[1].clientY
+            const dist = Math.sqrt(dx * dx + dy * dy)
+            if (lastPinchDist.current !== null) {
+                const ratio = dist / lastPinchDist.current
+                setScale(s => Math.min(Math.max(s * ratio, 1), 5))
+            }
+            lastPinchDist.current = dist
+        }
+    }
+    const handleTouchEnd = () => { lastPinchDist.current = null }
+
+    // Keyboard navigation
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose()
+            if (e.key === 'ArrowLeft' && imageUrls.length > 1) goTo((current - 1 + imageUrls.length) % imageUrls.length)
+            if (e.key === 'ArrowRight' && imageUrls.length > 1) goTo((current + 1) % imageUrls.length)
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [current, imageUrls.length])
+
+    if (imageUrls.length === 0) return null
+    const url = imageUrls[current]
+    const nombre = imageNombres[current] || `Imagen ${current + 1}`
+
+    return (
+        <div
+            className="fixed inset-0 z-[100] bg-black/95 flex flex-col"
+            onClick={onClose}
+            onWheel={handleWheel as any}
+        >
+            {/* Top bar */}
+            <div
+                className="flex items-center justify-between px-4 py-3 z-10 bg-gradient-to-b from-black/60 to-transparent flex-shrink-0"
+                onClick={e => e.stopPropagation()}
+            >
+                <div className="flex-1 min-w-0">
+                    <p className="text-white font-semibold text-sm truncate">{nombre}</p>
+                    {imageUrls.length > 1 && (
+                        <p className="text-white/50 text-xs mt-0.5">{current + 1} / {imageUrls.length}</p>
+                    )}
+                </div>
+                <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+                    <a
+                        href={url}
+                        download
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+                        title="Descargar imagen"
+                    >
+                        <Download className="h-4 w-4" />
+                    </a>
+                    <a
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+                        title="Abrir en nueva pestaña"
+                    >
+                        <Maximize2 className="h-4 w-4" />
+                    </a>
+                    <button
+                        onClick={onClose}
+                        className="p-2 rounded-full bg-white/10 hover:bg-red-500/80 text-white transition-colors"
+                        title="Cerrar (Esc)"
+                    >
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
+            </div>
+
+            {/* Image area */}
+            <div
+                className="flex-1 flex items-center justify-center relative overflow-hidden"
+                onClick={e => { if (scale <= 1) onClose(); else e.stopPropagation() }}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'pointer' }}
+            >
+                <img
+                    ref={imgRef}
+                    src={url}
+                    alt={nombre}
+                    draggable={false}
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                        transform: `scale(${scale}) translate(${translate.x / scale}px, ${translate.y / scale}px)`,
+                        transition: isDragging ? 'none' : 'transform 0.15s ease',
+                        maxWidth: '100%',
+                        maxHeight: '100%',
+                        objectFit: 'contain',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                    }}
+                    className="rounded-lg shadow-2xl"
+                />
+            </div>
+
+            {/* Zoom controls + prev/next */}
+            <div
+                className="flex items-center justify-center gap-3 py-3 px-4 flex-shrink-0"
+                onClick={e => e.stopPropagation()}
+            >
+                {imageUrls.length > 1 && (
+                    <button onClick={goPrev} className="p-2.5 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors">
+                        <ChevronLeft className="h-5 w-5" />
+                    </button>
+                )}
+                <button
+                    onClick={() => { setScale(s => Math.min(s * 1.3, 5)); }}
+                    className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors text-xs"
+                    title="Acercar"
+                >
+                    <ZoomIn className="h-4 w-4" />
+                </button>
+                <button
+                    onClick={reset}
+                    className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors text-xs font-semibold min-w-[50px] text-center"
+                    title="Restablecer zoom"
+                >
+                    {Math.round(scale * 100)}%
+                </button>
+                {imageUrls.length > 1 && (
+                    <button onClick={goNext} className="p-2.5 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors">
+                        <ChevronRight className="h-5 w-5" />
+                    </button>
+                )}
+            </div>
+
+            {/* Thumbnail strip (multiple images) */}
+            {imageUrls.length > 1 && (
+                <div
+                    className="flex gap-2 px-4 pb-4 overflow-x-auto justify-center flex-shrink-0"
+                    onClick={e => e.stopPropagation()}
+                >
+                    {imageUrls.map((u, i) => (
+                        <button
+                            key={i}
+                            onClick={() => goTo(i)}
+                            className={`flex-shrink-0 h-12 w-12 rounded-lg overflow-hidden border-2 transition-all ${
+                                i === current ? 'border-white scale-110' : 'border-white/30 opacity-60 hover:opacity-100'
+                            }`}
+                        >
+                            <img src={u} alt={imageNombres[i]} className="h-full w-full object-cover" />
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {/* Hint */}
+            <p className="text-center text-white/30 text-[10px] pb-2 flex-shrink-0">
+                {scale <= 1 ? 'Pellizca o usa la rueda para hacer zoom · Haz clic fuera para cerrar' : 'Arrastra para mover · Haz clic en % para restablecer'}
+            </p>
+        </div>
+    )
+}
+
+// ─── Comment Images ──────────────────────────────────────────
+
+function CommentImages({ archUrls, archNombres }: { archUrls: string[]; archNombres: string[] }) {
+    const [viewerIdx, setViewerIdx] = useState<number | null>(null)
+    const imgUrls = archUrls.filter((_, i) => !archNombres[i]?.toLowerCase().endsWith('.pdf'))
+    const imgNombres = archNombres.filter(n => !n.toLowerCase().endsWith('.pdf'))
+    const pdfEntries = archUrls
+        .map((url, i) => ({ url, nombre: archNombres[i] || `Archivo ${i + 1}` }))
+        .filter(e => e.nombre.toLowerCase().endsWith('.pdf'))
+
+    return (
+        <div className="space-y-1.5">
+            {imgUrls.length > 0 && (
+                <div className={`grid gap-1 ${
+                    imgUrls.length === 1 ? 'grid-cols-1' : 'grid-cols-2'
+                }`}>
+                    {imgUrls.map((url, i) => (
+                        <button
+                            key={i}
+                            type="button"
+                            onClick={() => setViewerIdx(i)}
+                            className="relative group overflow-hidden rounded-xl border border-gray-200 bg-gray-100"
+                            style={{ aspectRatio: imgUrls.length === 1 ? '4/3' : '1/1' }}
+                        >
+                            <img
+                                src={url}
+                                alt={imgNombres[i]}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
+                                <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-full p-1.5">
+                                    <ZoomIn className="h-3.5 w-3.5 text-gray-800" />
+                                </div>
+                            </div>
+                        </button>
+                    ))}
+                </div>
+            )}
+            {pdfEntries.map((e, i) => (
+                <a
+                    key={i}
+                    href={e.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-primary-700 font-medium hover:bg-gray-50 transition-colors"
+                >
+                    <FileImage className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span className="truncate max-w-[140px]">{e.nombre}</span>
+                </a>
+            ))}
+            {viewerIdx !== null && (
+                <ImageViewer
+                    urls={imgUrls}
+                    nombres={imgNombres}
+                    initialIndex={viewerIdx}
+                    onClose={() => setViewerIdx(null)}
+                />
+            )}
+        </div>
+    )
+}
+
 // ─── Comments Thread ──────────────────────────────────────────
 
 function CommentsThread({ requestId }: { requestId: string }) {
@@ -495,22 +785,7 @@ function CommentsThread({ requestId }: { requestId: string }) {
                                         </div>
                                     )}
                                     {/* File attachments */}
-                                    {archUrls.map((url, idx) => {
-                                        const nombre = archNombres[idx] || `Archivo ${idx + 1}`
-                                        const esImagen = !nombre.toLowerCase().endsWith('.pdf')
-                                        return esImagen ? (
-                                            <a key={idx} href={url} target="_blank" rel="noreferrer" className="block">
-                                                <img src={url} alt={nombre} className="max-h-36 rounded-xl border border-gray-200 object-cover hover:opacity-90 transition-opacity" />
-                                            </a>
-                                        ) : (
-                                            <a key={idx} href={url} target="_blank" rel="noreferrer"
-                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-primary-700 font-medium hover:bg-gray-50 transition-colors"
-                                            >
-                                                <FileImage className="h-3.5 w-3.5 flex-shrink-0" />
-                                                <span className="truncate max-w-[140px]">{nombre}</span>
-                                            </a>
-                                        )
-                                    })}
+                                    <CommentImages archUrls={archUrls} archNombres={archNombres} />
                                     <p className="text-[10px] text-gray-400">{formatDate(c.created_at)}</p>
                                 </div>
                             </div>
@@ -609,14 +884,13 @@ function ApprovalCard({
     const [deleting, setDeleting] = useState(false)
     const [showNota, setShowNota] = useState(false)
     const [nota, setNota] = useState(req.notas_evaluador || '')
-    const [showImageModal, setShowImageModal] = useState(false)
     const [showComments, setShowComments] = useState(false)
     const badge = getEstadoBadge(req.estado)
 
     // Support multiple files stored as '|||'-separated values
     const desprendibleUrls = req.desprendible_url ? req.desprendible_url.split('|||') : []
     const desprendibleNombres = req.desprendible_nombre ? req.desprendible_nombre.split('|||') : []
-    const isPdf = req.desprendible_nombre?.toLowerCase().endsWith('.pdf')
+    const [viewerIndex, setViewerIndex] = useState<number | null>(null)
 
     const handleDelete = async () => {
         if (!confirm('¿Seguro que deseas eliminar esta solicitud de aprobación? Esta acción no se puede deshacer.')) return;
@@ -731,37 +1005,71 @@ function ApprovalCard({
                     {/* Desprendibles (soporta múltiples) */}
                     {desprendibleUrls.length > 0 && (
                         <div className="mt-1 space-y-2">
-                            {desprendibleUrls.map((url, idx) => {
-                                const nombre = desprendibleNombres[idx] || `Archivo ${idx + 1}`
-                                const esImagen = !nombre.toLowerCase().endsWith('.pdf')
-                                return esImagen ? (
-                                    <button
-                                        key={idx}
-                                        onClick={() => setShowImageModal(true)}
-                                        className="flex items-center gap-2 w-full group relative"
-                                    >
-                                        <img
-                                            src={url}
-                                            alt={nombre}
-                                            className="h-20 w-full object-cover rounded-lg border border-gray-200 group-hover:opacity-80 transition-opacity"
-                                        />
-                                        <span className="absolute inset-0 hidden group-hover:flex items-center justify-center gap-1 text-white text-xs bg-black/40 rounded-lg">
-                                            <Eye className="h-3.5 w-3.5" /> {nombre}
-                                        </span>
-                                    </button>
-                                ) : (
-                                    <a
-                                        key={idx}
-                                        href={url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors text-sm text-primary-700 font-medium"
-                                    >
-                                        <FileImage className="h-4 w-4" />
-                                        {nombre}
-                                    </a>
+                            {/* Grid de miniaturas para imágenes */}
+                            {(() => {
+                                const imgUrls = desprendibleUrls.filter((_, i) => !desprendibleNombres[i]?.toLowerCase().endsWith('.pdf'))
+                                const imgNombres = desprendibleNombres.filter(n => !n.toLowerCase().endsWith('.pdf'))
+                                const pdfEntries = desprendibleUrls
+                                    .map((url, i) => ({ url, nombre: desprendibleNombres[i] || `Archivo ${i+1}` }))
+                                    .filter(e => e.nombre.toLowerCase().endsWith('.pdf'))
+                                return (
+                                    <>
+                                        {imgUrls.length > 0 && (
+                                            <div className={`grid gap-1.5 ${
+                                                imgUrls.length === 1 ? 'grid-cols-1' :
+                                                imgUrls.length === 2 ? 'grid-cols-2' :
+                                                'grid-cols-2'
+                                            }`}>
+                                                {imgUrls.map((url, idx) => (
+                                                    <button
+                                                        key={idx}
+                                                        type="button"
+                                                        onClick={() => setViewerIndex(idx)}
+                                                        className="relative group block w-full overflow-hidden rounded-xl border border-gray-200 bg-gray-100"
+                                                        style={{ aspectRatio: imgUrls.length === 1 ? '16/9' : '1/1' }}
+                                                    >
+                                                        <img
+                                                            src={url}
+                                                            alt={imgNombres[idx]}
+                                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                        />
+                                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                                                            <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-full p-2 shadow">
+                                                                <ZoomIn className="h-4 w-4 text-gray-800" />
+                                                            </div>
+                                                        </div>
+                                                        {imgUrls.length > 1 && idx === imgUrls.length - 1 && imgUrls.length > 4 && (
+                                                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-xl">
+                                                                <span className="text-white font-bold text-lg">+{imgUrls.length - 3}</span>
+                                                            </div>
+                                                        )}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {pdfEntries.map((e, i) => (
+                                            <a
+                                                key={i}
+                                                href={e.url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors text-sm text-primary-700 font-medium"
+                                            >
+                                                <FileImage className="h-4 w-4" />
+                                                {e.nombre}
+                                            </a>
+                                        ))}
+                                        {viewerIndex !== null && (
+                                            <ImageViewer
+                                                urls={imgUrls}
+                                                nombres={imgNombres}
+                                                initialIndex={viewerIndex}
+                                                onClose={() => setViewerIndex(null)}
+                                            />
+                                        )}
+                                    </>
                                 )
-                            })}
+                            })()}
                         </div>
                     )}
 
@@ -852,36 +1160,7 @@ function ApprovalCard({
                 {showComments && <CommentsThread requestId={req.id} />}
             </div>
 
-            {/* Image Modal — muestra todas las imágenes */}
-            {showImageModal && desprendibleUrls.some((u, i) => !desprendibleNombres[i]?.toLowerCase().endsWith('.pdf')) && (
-                <div
-                    className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
-                    onClick={() => setShowImageModal(false)}
-                >
-                    <div className="relative max-w-3xl w-full space-y-4" onClick={e => e.stopPropagation()}>
-                        <button
-                            onClick={() => setShowImageModal(false)}
-                            className="absolute -top-4 -right-4 bg-white rounded-full p-1.5 shadow-lg hover:bg-red-50 z-10"
-                        >
-                            <X className="h-5 w-5 text-gray-700" />
-                        </button>
-                        {desprendibleUrls.map((url, idx) => {
-                            const nombre = desprendibleNombres[idx] || `Archivo ${idx + 1}`
-                            if (nombre.toLowerCase().endsWith('.pdf')) return null
-                            return (
-                                <div key={idx}>
-                                    <img
-                                        src={url}
-                                        alt={nombre}
-                                        className="w-full rounded-2xl shadow-2xl max-h-[70vh] object-contain bg-white"
-                                    />
-                                    <p className="text-center text-white/60 text-sm mt-2">{req.nombre_cliente} · {nombre}</p>
-                                </div>
-                            )
-                        })}
-                    </div>
-                </div>
-            )}
+            {/* Image Viewer — managed via viewerIndex state */}
         </>
     )
 }
